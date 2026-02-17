@@ -37,7 +37,7 @@ export default function Navbar({
       localStorage.removeItem('user_grade');
     }
     // Redirect to login
-    router.push('/login');
+    router.push('/sign-in');
   };
 
   const navigationLinks = [

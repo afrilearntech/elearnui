@@ -88,7 +88,7 @@ export default function Sidebar({ mobileOpen = false, onClose, userName = "Admin
                 if (typeof window !== "undefined") {
                   localStorage.removeItem("auth_token");
                   localStorage.removeItem("user");
-                  window.location.href = "/admin/sign-in";
+                  window.location.href = "/sign-in";
                 }
               }}
               className="flex items-center justify-center gap-2 rounded-full bg-emerald-600 text-sm font-semibold text-white hover:bg-emerald-700 w-[220px] h-[50px] mx-auto"
@@ -148,7 +148,7 @@ export default function Sidebar({ mobileOpen = false, onClose, userName = "Admin
                     if (typeof window !== "undefined") {
                       localStorage.removeItem("auth_token");
                       localStorage.removeItem("user");
-                      window.location.href = "/admin/sign-in";
+                      window.location.href = "/sign-in";
                     }
                     if (onClose) {
                       onClose();

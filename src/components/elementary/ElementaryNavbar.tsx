@@ -20,7 +20,7 @@ export default function ElementaryNavbar({ onMenuToggle }: ElementaryNavbarProps
       localStorage.removeItem('user_grade');
     }
     // Redirect to login
-    router.push('/login');
+    router.push('/sign-in');
   };
 
   return (

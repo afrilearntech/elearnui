@@ -59,7 +59,7 @@ export default function Sidebar({ mobileOpen = false, onClose, userName = "Paren
       localStorage.removeItem("user");
       showSuccessToast("You have been logged out successfully");
       setTimeout(() => {
-        router.push("/parent-teacher/sign-in");
+        router.push("/sign-in");
       }, 500);
     }
     if (onClose) {
