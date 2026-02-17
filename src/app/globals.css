@@ -1,0 +1,62 @@
+@import "tailwindcss";
+
+* {
+  font-family: 'Andika', sans-serif;
+}
+
+/* Screen reader only class */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Enhanced focus indicators for accessibility */
+*:focus-visible {
+  outline: 3px solid #3B82F6;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 3px solid #F59E0B;
+  outline-offset: 2px;
+}
+
+/* Skip links styling */
+.skip-link {
+  position: absolute;
+  top: -100px;
+  left: 0;
+  background: #3B82F6;
+  color: white;
+  padding: 12px 24px;
+  text-decoration: none;
+  font-weight: bold;
+  border-radius: 0 0 8px 0;
+  z-index: 10000;
+  font-size: 16px;
+}
+
+.skip-link:focus {
+  top: 0;
+  outline: 3px solid #F59E0B;
+  outline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+  [class*="react-hot-toast"] {
+    max-width: calc(100vw - 32px) !important;
+    width: calc(100vw - 32px) !important;
+  }
+}
