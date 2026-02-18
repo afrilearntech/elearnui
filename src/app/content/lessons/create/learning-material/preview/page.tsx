@@ -97,7 +97,7 @@ function LessonPreviewContent() {
             <h1 className="text-2xl font-semibold text-gray-900">Lesson Details Page</h1>
             <p className="text-sm text-gray-500">Missing lesson identifier.</p>
           </div>
-          <Link href="/lessons" className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
+          <Link href="/content/lessons" className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
             Back to lessons
           </Link>
         </div>
@@ -113,7 +113,7 @@ function LessonPreviewContent() {
             <h1 className="text-2xl font-semibold text-gray-900">Lesson Details Page</h1>
             <p className="text-sm text-gray-500">Fetching your lesson details…</p>
           </div>
-          <Link href="/lessons" className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
+          <Link href="/content/lessons" className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
             Back to lessons
           </Link>
         </div>
@@ -134,7 +134,7 @@ function LessonPreviewContent() {
             <h1 className="text-2xl font-semibold text-gray-900">Lesson Details Page</h1>
             <p className="text-sm text-rose-500">{error ?? "Lesson not found."}</p>
           </div>
-          <Link href="/lessons" className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
+          <Link href="/content/lessons" className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
             Back to lessons
           </Link>
         </div>
@@ -156,7 +156,7 @@ function LessonPreviewContent() {
           <h1 className="text-2xl font-semibold text-gray-900">Review Lesson</h1>
           <p className="text-sm text-gray-500">Double-check the details before submitting for review.</p>
         </div>
-        <Link href="/lessons" className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
+        <Link href="/content/lessons" className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
           Back to lessons
         </Link>
       </div>
@@ -270,12 +270,12 @@ function LessonPreviewContent() {
           ) : null}
 
           <div className="flex flex-wrap items-center justify-end gap-3 pt-4">
-            <Link href="/lessons" className="rounded-lg border border-gray-200 bg-white px-5 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">
+            <Link href="/content/lessons" className="rounded-lg border border-gray-200 bg-white px-5 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">
               Back
             </Link>
             {userRole === "CONTENTCREATOR" && isRequestChanges ? (
               <Link
-                href={`/lessons/create/learning-material?edit=${lesson.id}`}
+                href={`/content/lessons/create/learning-material?edit=${lesson.id}`}
                 className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
               >
                 Edit Lesson
@@ -305,7 +305,7 @@ export default function LessonPreviewPage() {
             <h1 className="text-2xl font-semibold text-gray-900">Lesson Details Page</h1>
             <p className="text-sm text-gray-500">Loading...</p>
           </div>
-          <Link href="/lessons" className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
+          <Link href="/content/lessons" className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
             Back to lessons
           </Link>
         </div>

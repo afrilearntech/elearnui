@@ -202,6 +202,39 @@ export async function getSubjectById(
   });
 }
 
+export async function deleteSubject(
+  id: number,
+  token: string,
+): Promise<void> {
+  if (!token) {
+    throw new ApiClientError("Authentication token is missing", 401);
+  }
+
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (!API_BASE_URL) {
+    throw new ApiClientError("API base URL is not configured", 0);
+  }
+
+  const response = await fetch(`${API_BASE_URL}/subjects/${id}/`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Token ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    const contentType = response.headers.get("content-type");
+    const isJson = contentType?.includes("application/json");
+    if (isJson) {
+      const data = await response.json();
+      const errorMessage =
+        data.detail || data.message || data.error || `Delete failed with status ${response.status}`;
+      throw new ApiClientError(errorMessage, response.status);
+    }
+    throw new ApiClientError(`Delete failed with status ${response.status}`, response.status);
+  }
+}
+
 export type UpdateSubjectRequest = {
   name?: string;
   grade?: string;

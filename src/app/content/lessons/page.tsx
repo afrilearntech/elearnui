@@ -2,6 +2,7 @@
 import LessonsHeader from "@/components/content/lessons/LessonsHeader";
 import {
   getLessons,
+  deleteLesson,
   LessonRecord,
   moderateContent,
   ModerateAction,
@@ -128,6 +129,8 @@ export default function LessonsPage() {
   const [pendingModerationAction, setPendingModerationAction] = React.useState<ModerateAction | null>(null);
   const [moderationLoadingAction, setModerationLoadingAction] = React.useState<ModerateAction | null>(null);
   const [userRole, setUserRole] = React.useState<string>("CONTENTCREATOR");
+  const [deleteTarget, setDeleteTarget] = React.useState<LessonRow | null>(null);
+  const [isDeleting, setIsDeleting] = React.useState(false);
   const isModerationProcessing = moderationLoadingAction !== null;
   const isValidator = userRole === "CONTENTVALIDATOR";
 
@@ -419,6 +422,34 @@ export default function LessonsPage() {
     await submitModeration(pendingModerationAction, moderationComment.trim());
   };
 
+  const handleDeleteLesson = React.useCallback(async () => {
+    if (!deleteTarget) return;
+    const token = localStorage.getItem("auth_token");
+    if (!token) {
+      await notifyError("Missing authentication token. Please sign in again.");
+      return;
+    }
+
+    const lessonId = parseInt(deleteTarget.id, 10);
+    if (!lessonId || Number.isNaN(lessonId)) {
+      await notifyError("Invalid lesson identifier.");
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      await deleteLesson(lessonId, token);
+      setLessons((prev) => prev.filter((l) => l.id !== deleteTarget.id));
+      await notifySuccess("Lesson deleted successfully.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to delete lesson.";
+      await notifyError(message);
+    } finally {
+      setIsDeleting(false);
+      setDeleteTarget(null);
+    }
+  }, [deleteTarget]);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -430,7 +461,7 @@ export default function LessonsPage() {
         </div>
         {!isValidator ? (
           <Link
-            href="/lessons/create"
+            href="/content/lessons/create"
             className="inline-flex items-center justify-center gap-2 rounded-full bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow hover:bg-emerald-700 transition"
           >
             <span className="text-lg leading-none">+</span>
@@ -595,61 +626,137 @@ export default function LessonsPage() {
           </div>
         </>
       ) : (
-        <div className="rounded-2xl border border-gray-200 bg-white p-4">
+        <>
+          {/* Result count */}
+          {!isLoading && !loadError && filtered.length > 0 && (
+            <p className="text-sm text-gray-500">
+              Showing <span className="font-medium text-gray-700">{filtered.length}</span> {filtered.length === 1 ? "lesson" : "lessons"}
+            </p>
+          )}
+
           {isLoading ? (
-            <div className="rounded-xl border border-gray-200 bg-white p-6 text-center text-sm text-gray-600">Loading lessons...</div>
+            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="animate-pulse overflow-hidden rounded-xl border border-gray-200 bg-white">
+                  <div className="h-44 bg-gray-200" />
+                  <div className="p-4 space-y-3">
+                    <div className="h-4 w-3/4 rounded bg-gray-200" />
+                    <div className="h-3 w-1/2 rounded bg-gray-100" />
+                    <div className="h-3 w-full rounded bg-gray-100" />
+                  </div>
+                </div>
+              ))}
+            </div>
           ) : loadError ? (
-            <div className="rounded-xl border border-rose-200 bg-white p-6 text-center text-sm text-rose-600">{loadError}</div>
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 p-10 text-center">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="mx-auto text-rose-400">
+                <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+              <p className="mt-3 text-sm font-medium text-rose-700">{loadError}</p>
+            </div>
           ) : filtered.length === 0 ? (
-            <div className="rounded-xl border border-gray-200 bg-white p-6 text-center text-sm text-gray-600">No lessons match your filters.</div>
+            <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-12 text-center">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="mx-auto text-gray-300">
+                <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" />
+              </svg>
+              <h3 className="mt-4 text-sm font-semibold text-gray-900">No lessons found</h3>
+              <p className="mt-1 text-sm text-gray-500">Create a new lesson to get started.</p>
+              <Link
+                href="/content/lessons/create"
+                className="mt-4 inline-flex items-center gap-2 rounded-full bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Create Lesson
+              </Link>
+            </div>
           ) : (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
               {filtered.map((lesson) => (
-                <button
+                <div
                   key={lesson.id}
-                  type="button"
+                  role="button"
+                  tabIndex={0}
                   onClick={() => router.push(`/content/lessons/create/learning-material/preview?id=${lesson.id}`)}
-                  className="group overflow-hidden rounded-2xl border border-gray-200 bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") router.push(`/content/lessons/create/learning-material/preview?id=${lesson.id}`); }}
+                  className="group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm outline-none transition-all duration-200 hover:shadow-md hover:border-gray-300 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
                 >
-                  <div className="relative h-44 w-full overflow-hidden bg-gray-100">
+                  {/* Image */}
+                  <div className="relative h-44 w-full shrink-0 overflow-hidden bg-gray-100">
                     {lesson.thumbnail ? (
                       <Image
                         src={lesson.thumbnail}
                         alt={lesson.title}
                         fill
-                        className="object-cover transition duration-300 group-hover:scale-105"
-                        sizes="(min-width: 1280px) 30vw, (min-width: 768px) 45vw, 100vw"
+                        className="object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+                        sizes="(min-width: 1280px) 33vw, (min-width: 768px) 50vw, 100vw"
                       />
                     ) : (
-                      <div className="flex h-full w-full items-center justify-center text-xs text-gray-400">Thumbnail pending</div>
-                    )}
-                    <span className={`absolute right-3 top-3 rounded-full px-3 py-1 text-[11px] font-semibold ${getStatusBadge(lesson.status)}`}>
-                      {renderStatusLabel(lesson.status)}
-                    </span>
-                  </div>
-                  <div className="space-y-3 p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-base font-semibold text-gray-900">{lesson.title}</p>
-                        <p className="text-xs text-gray-500">{lesson.date || "Awaiting date"}</p>
+                      <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-emerald-50 to-gray-100">
+                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-gray-300">
+                          <polygon points="23 7 16 12 23 17 23 7" />
+                          <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+                        </svg>
                       </div>
-                      <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">{lesson.type}</span>
+                    )}
+                    <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/30 to-transparent" />
+
+                    {/* Status badge */}
+                    <div className="absolute left-3 top-3">
+                      <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold backdrop-blur-sm ${getStatusBadge(lesson.status)}`}>
+                        {renderStatusLabel(lesson.status)}
+                      </span>
                     </div>
-                    <p className="text-sm text-gray-600">
-                      {lesson.description
-                        ? `${lesson.description.slice(0, 110)}${lesson.description.length > 110 ? "…" : ""}`
-                        : "No description provided yet."}
+
+                    {/* Type badge */}
+                    <div className="absolute right-3 bottom-3">
+                      <span className="rounded-md bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 backdrop-blur-sm">{lesson.type}</span>
+                    </div>
+
+                    {/* Delete button */}
+                    <button
+                      aria-label="Delete lesson"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeleteTarget(lesson);
+                      }}
+                      className="absolute right-2.5 top-2.5 flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-gray-500 opacity-0 shadow-sm backdrop-blur-sm transition-all hover:bg-rose-50 hover:text-rose-600 group-hover:opacity-100"
+                    >
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                        <path d="M10 11v6" />
+                        <path d="M14 11v6" />
+                        <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  {/* Content */}
+                  <div className="flex flex-1 flex-col p-4">
+                    <h3 className="line-clamp-2 text-[15px] font-semibold leading-snug text-gray-900">{lesson.title}</h3>
+                    <p className="mt-1.5 line-clamp-2 text-[13px] leading-relaxed text-gray-500">
+                      {lesson.description || "No description provided yet."}
                     </p>
-                    <div className="flex items-center justify-between text-xs text-gray-500">
-                      <span>{lesson.subject}</span>
-                      <span>{lesson.grade}</span>
+                    <div className="mt-auto flex items-center gap-4 pt-3 text-[13px] text-gray-500">
+                      <span className="inline-flex items-center gap-1.5">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400">
+                          <path d="M4 6h16" /><path d="M4 12h16" /><path d="M4 18h7" />
+                        </svg>
+                        {lesson.subject}
+                      </span>
+                      <span className="inline-flex items-center gap-1.5">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400">
+                          <path d="M22 10v6M2 10l10-5 10 5M2 10l10 5M2 10v6c0 1.1.9 2 2 2h4M22 10l-10 5M22 10v6c0 1.1-.9 2-2 2h-4M6 21h12" />
+                        </svg>
+                        {lesson.grade}
+                      </span>
                     </div>
                   </div>
-                </button>
+                </div>
               ))}
             </div>
           )}
-        </div>
+        </>
       )}
 
       {isValidator && isModalOpen ? (
@@ -945,7 +1052,54 @@ export default function LessonsPage() {
         </div>
       ) : null}
 
-
+      {/* Delete Confirmation Modal */}
+      {deleteTarget ? (
+        <div
+          className="fixed inset-0 z-[130] flex items-center justify-center bg-black/60 px-4"
+          onClick={(e) => { if (e.target === e.currentTarget && !isDeleting) setDeleteTarget(null); }}
+        >
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="flex flex-col items-center text-center">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-rose-100">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-rose-600">
+                  <polyline points="3 6 5 6 21 6" />
+                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                  <path d="M10 11v6" />
+                  <path d="M14 11v6" />
+                  <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
+                </svg>
+              </div>
+              <h3 className="mt-4 text-lg font-semibold text-gray-900">Delete Lesson</h3>
+              <p className="mt-2 text-sm text-gray-600">
+                Are you sure you want to delete <span className="font-semibold text-gray-900">{deleteTarget.title}</span>? This action cannot be undone.
+              </p>
+            </div>
+            <div className="mt-6 flex items-center gap-3">
+              <button
+                onClick={() => setDeleteTarget(null)}
+                disabled={isDeleting}
+                className="flex-1 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteLesson}
+                disabled={isDeleting}
+                className="flex-1 rounded-lg bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isDeleting ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    Deleting...
+                  </span>
+                ) : (
+                  "Delete"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

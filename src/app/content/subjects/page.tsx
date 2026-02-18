@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Icon } from "@iconify/react";
-import { getSubjects, SubjectRecord } from "@/lib/api/content/subjects";
+import { getSubjects, deleteSubject, SubjectRecord } from "@/lib/api/content/subjects";
 import { moderateContent, ModerateAction } from "@/lib/api/content/lessons";
 import SubjectsHeader from "@/components/content/subjects/SubjectsHeader";
 import SubjectCard, { SubjectStatus } from "@/components/content/subjects/SubjectCard";
@@ -138,6 +138,8 @@ export default function SubjectsPage() {
   const [pendingModerationAction, setPendingModerationAction] = React.useState<ModerateAction | null>(null);
   const [moderationLoadingAction, setModerationLoadingAction] = React.useState<ModerateAction | null>(null);
   const [isAssignModalOpen, setIsAssignModalOpen] = React.useState(false);
+  const [deleteTarget, setDeleteTarget] = React.useState<SubjectRow | null>(null);
+  const [isDeleting, setIsDeleting] = React.useState(false);
   const isModerationProcessing = moderationLoadingAction !== null;
   const isValidator = userRole === "CONTENTVALIDATOR";
   const handleCreatorStatusChange = React.useCallback(
@@ -448,32 +450,62 @@ const isValidStatusFilterValue = (value: string): value is StatusFilterOption =>
   return STATUS_FILTER_OPTIONS.includes(value as StatusFilterOption);
 };
 
+  const handleDeleteSubject = React.useCallback(async () => {
+    if (!deleteTarget) return;
+    const token = localStorage.getItem("auth_token");
+    if (!token) {
+      await notifyError("Missing authentication token. Please sign in again.");
+      return;
+    }
+
+    const subjectId = parseInt(deleteTarget.id, 10);
+    if (!subjectId || Number.isNaN(subjectId)) {
+      await notifyError("Invalid subject identifier.");
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      await deleteSubject(subjectId, token);
+      setSubjects((prev) => prev.filter((s) => s.id !== deleteTarget.id));
+      await notifySuccess("Subject deleted successfully.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to delete subject.";
+      await notifyError(message);
+    } finally {
+      setIsDeleting(false);
+      setDeleteTarget(null);
+    }
+  }, [deleteTarget]);
+
   if (!isValidator) {
     return (
       <div className="space-y-6">
+        {/* Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Subject</h1>
-            <p className="text-sm text-gray-500">Create and manage your subjects</p>
+            <h1 className="text-2xl font-bold text-gray-900">Subjects</h1>
+            <p className="mt-0.5 text-sm text-gray-500">Create and manage your subjects</p>
           </div>
           <div className="flex flex-col sm:flex-row gap-3">
             <button
               onClick={() => setIsAssignModalOpen(true)}
-              className="inline-flex items-center justify-center gap-2 rounded-full bg-gray-700 px-5 py-2.5 text-sm font-semibold text-white shadow hover:bg-gray-800 transition-colors"
+              className="inline-flex items-center justify-center gap-2 rounded-full bg-gray-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-gray-800 transition-colors"
             >
               <Icon icon="solar:user-check-rounded-bold" className="w-5 h-5" />
-              Assign Subject to Teacher
+              Assign to Teacher
             </button>
             <Link
-              href="/subjects/create"
-              className="inline-flex items-center justify-center gap-2 rounded-full bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow hover:bg-emerald-700 transition-colors"
+              href="/content/subjects/create"
+              className="inline-flex items-center justify-center gap-2 rounded-full bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 transition-colors"
             >
-              <span className="text-lg leading-none">+</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               Create Subject
             </Link>
           </div>
         </div>
 
+        {/* Filters */}
         <SubjectsHeader
           onSearch={(value) => setSearch(value)}
           grade={gradeFilter}
@@ -482,20 +514,60 @@ const isValidStatusFilterValue = (value: string): value is StatusFilterOption =>
           onStatusChange={handleCreatorStatusChange}
         />
 
+        {/* Results count */}
+        {!isLoading && !loadError && filtered.length > 0 && (
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-gray-500">
+              Showing <span className="font-medium text-gray-700">{filtered.length}</span> {filtered.length === 1 ? "subject" : "subjects"}
+            </p>
+          </div>
+        )}
+
+        {/* Cards */}
         {isLoading ? (
-          <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center text-gray-600">Loading subjects...</div>
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="animate-pulse rounded-xl border border-gray-200 bg-white overflow-hidden">
+                <div className="h-44 bg-gray-200" />
+                <div className="p-4 space-y-3">
+                  <div className="h-4 w-3/4 rounded bg-gray-200" />
+                  <div className="h-3 w-1/2 rounded bg-gray-100" />
+                </div>
+              </div>
+            ))}
+          </div>
         ) : loadError ? (
-          <div className="rounded-2xl border border-rose-200 bg-white p-8 text-center text-rose-600">{loadError}</div>
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 p-10 text-center">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="mx-auto text-rose-400">
+              <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            <p className="mt-3 text-sm font-medium text-rose-700">{loadError}</p>
+          </div>
         ) : filtered.length === 0 ? (
-          <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center text-gray-600">No subjects found. Create a new one to get started.</div>
+          <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-12 text-center">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="mx-auto text-gray-300">
+              <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" />
+            </svg>
+            <h3 className="mt-4 text-sm font-semibold text-gray-900">No subjects found</h3>
+            <p className="mt-1 text-sm text-gray-500">Create a new one to get started.</p>
+            <Link
+              href="/content/subjects/create"
+              className="mt-4 inline-flex items-center gap-2 rounded-full bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Create Subject
+            </Link>
+          </div>
         ) : (
-          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {filtered.map((subject) => (
-              <button
+              <div
                 key={subject.id}
-                type="button"
+                role="button"
+                tabIndex={0}
                 onClick={() => handleReview(subject)}
-                className="text-left"
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") handleReview(subject); }}
+                className="cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 rounded-xl"
               >
                 <SubjectCard
                   title={subject.name}
@@ -503,11 +575,67 @@ const isValidStatusFilterValue = (value: string): value is StatusFilterOption =>
                   lessonsCount={subject.lessonsCount}
                   imageSrc={subject.thumbnail}
                   status={getCreatorCardStatus(subject.status)}
+                  onDelete={() => setDeleteTarget(subject)}
                 />
-              </button>
+              </div>
             ))}
           </div>
         )}
+
+        {/* Delete Confirmation Modal (Creator) */}
+        {deleteTarget ? (
+          <div
+            className="fixed inset-0 z-[130] flex items-center justify-center bg-black/60 px-4"
+            onClick={(e) => { if (e.target === e.currentTarget && !isDeleting) setDeleteTarget(null); }}
+          >
+            <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
+              <div className="flex flex-col items-center text-center">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-rose-100">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-rose-600">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                    <path d="M10 11v6" />
+                    <path d="M14 11v6" />
+                    <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
+                  </svg>
+                </div>
+                <h3 className="mt-4 text-lg font-semibold text-gray-900">Delete Subject</h3>
+                <p className="mt-2 text-sm text-gray-600">
+                  Are you sure you want to delete <span className="font-semibold text-gray-900">{deleteTarget.name}</span>? This action cannot be undone.
+                </p>
+              </div>
+              <div className="mt-6 flex items-center gap-3">
+                <button
+                  onClick={() => setDeleteTarget(null)}
+                  disabled={isDeleting}
+                  className="flex-1 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteSubject}
+                  disabled={isDeleting}
+                  className="flex-1 rounded-lg bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isDeleting ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                      Deleting...
+                    </span>
+                  ) : (
+                    "Delete"
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        <AssignSubjectToTeacherModal
+          isOpen={isAssignModalOpen}
+          onClose={() => setIsAssignModalOpen(false)}
+          onSuccess={() => {}}
+        />
       </div>
     );
   }
@@ -910,7 +1038,7 @@ const isValidStatusFilterValue = (value: string): value is StatusFilterOption =>
                 </button>
                 {!isValidator && modalSubject && modalSubject.status === "REQUEST_CHANGES" ? (
                   <Link
-                    href={`/subjects/create?edit=${modalSubject.id}`}
+                    href={`/content/subjects/create?edit=${modalSubject.id}`}
                     className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
                   >
                     Edit Subject
@@ -1007,6 +1135,55 @@ const isValidStatusFilterValue = (value: string): value is StatusFilterOption =>
           // Optionally refresh subjects if needed
         }}
       />
+
+      {/* Delete Confirmation Modal */}
+      {deleteTarget ? (
+        <div
+          className="fixed inset-0 z-[130] flex items-center justify-center bg-black/60 px-4"
+          onClick={(e) => { if (e.target === e.currentTarget && !isDeleting) setDeleteTarget(null); }}
+        >
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="flex flex-col items-center text-center">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-rose-100">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-rose-600">
+                  <polyline points="3 6 5 6 21 6" />
+                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                  <path d="M10 11v6" />
+                  <path d="M14 11v6" />
+                  <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
+                </svg>
+              </div>
+              <h3 className="mt-4 text-lg font-semibold text-gray-900">Delete Subject</h3>
+              <p className="mt-2 text-sm text-gray-600">
+                Are you sure you want to delete <span className="font-semibold text-gray-900">{deleteTarget.name}</span>? This action cannot be undone.
+              </p>
+            </div>
+            <div className="mt-6 flex items-center gap-3">
+              <button
+                onClick={() => setDeleteTarget(null)}
+                disabled={isDeleting}
+                className="flex-1 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteSubject}
+                disabled={isDeleting}
+                className="flex-1 rounded-lg bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isDeleting ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    Deleting...
+                  </span>
+                ) : (
+                  "Delete"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

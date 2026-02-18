@@ -84,7 +84,7 @@ export default function CreateGamePage() {
           <h1 className="text-2xl font-bold text-gray-900">Create Game</h1>
           <p className="text-sm text-gray-500">Create a new learning game for students.</p>
         </div>
-        <Link href="/games" className="text-sm font-medium text-emerald-700 hover:underline">
+        <Link href="/content/games" className="text-sm font-medium text-emerald-700 hover:underline">
           Back to Games
         </Link>
       </div>
@@ -232,7 +232,7 @@ export default function CreateGamePage() {
 
         <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-end">
           <Link
-            href="/games"
+            href="/content/games"
             className="inline-flex items-center justify-center rounded-full border border-gray-300 px-5 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"
           >
             Cancel

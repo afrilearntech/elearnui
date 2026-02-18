@@ -149,7 +149,7 @@ export default function QuizAssessmentCreatePage() {
         </div>
 
         <div className="text-center">
-          <Link href="/lessons" className="text-sm text-emerald-700 hover:underline">Back to Lessons</Link>
+          <Link href="/content/lessons" className="text-sm text-emerald-700 hover:underline">Back to Lessons</Link>
         </div>
       </div>
     </div>

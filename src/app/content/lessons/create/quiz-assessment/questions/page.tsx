@@ -422,7 +422,7 @@ function QuizQuestionsContent() {
         </div>
 
         <div className="text-center">
-          <Link href="/lessons/create/quiz-assessment" className="text-sm text-emerald-700 hover:underline">Back</Link>
+          <Link href="/content/lessons/create/quiz-assessment" className="text-sm text-emerald-700 hover:underline">Back</Link>
         </div>
       </div>
 

@@ -438,7 +438,7 @@ export default function LearningMaterialCreatePage() {
         </section>
 
         <div className="text-center">
-          <Link href="/lessons" className="text-sm text-emerald-700 hover:underline">
+          <Link href="/content/lessons" className="text-sm text-emerald-700 hover:underline">
             Back to Lessons
           </Link>
         </div>

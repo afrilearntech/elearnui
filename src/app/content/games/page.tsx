@@ -338,7 +338,7 @@ export default function GamesPage() {
         </div>
         {!isValidator ? (
           <Link
-            href="/games/create"
+            href="/content/games/create"
             className="inline-flex items-center justify-center gap-2 rounded-full bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow hover:bg-emerald-700 transition-colors"
           >
             <span className="text-lg leading-none">+</span>
@@ -811,7 +811,7 @@ export default function GamesPage() {
                 </button>
                 {!isValidator && modalGame && modalGame.status === "REQUEST_CHANGES" ? (
                   <Link
-                    href={`/games/create?edit=${modalGame.id}`}
+                    href={`/content/games/create?edit=${modalGame.id}`}
                     className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
                   >
                     Edit Game

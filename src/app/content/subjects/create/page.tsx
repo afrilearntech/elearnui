@@ -518,7 +518,7 @@ export default function CreateSubjectPage() {
 
         {/* Back link */}
         <div>
-          <Link href="/subjects" className="text-sm text-emerald-700 hover:underline">Back to Subjects</Link>
+          <Link href="/content/subjects" className="text-sm text-emerald-700 hover:underline">Back to Subjects</Link>
         </div>
         </form>
         ) : step === 2 ? (
@@ -729,7 +729,7 @@ export default function CreateSubjectPage() {
             </div>
             <h3 className="text-base font-semibold text-gray-900">Submitted Successfully</h3>
             <p className="mt-2 text-sm text-gray-600">Your subject has been submitted and will be reviewed for validation before it can be published. You'll receive a notification once the review is complete.</p>
-            <button onClick={() => router.push('/subjects')} className="mt-5 inline-flex items-center justify-center rounded-full bg-emerald-600 px-6 py-2 text-sm font-semibold text-white hover:bg-emerald-700">Okay</button>
+            <button onClick={() => router.push('/content/subjects')} className="mt-5 inline-flex items-center justify-center rounded-full bg-emerald-600 px-6 py-2 text-sm font-semibold text-white hover:bg-emerald-700">Okay</button>
           </div>
         </div>
       ) : null}
