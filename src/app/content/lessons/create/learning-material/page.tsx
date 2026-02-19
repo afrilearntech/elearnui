@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import React from "react";
 import { createLesson } from "@/lib/api/content/lessons";
 import { getSubjects, SubjectRecord, TopicRecord, getTopics } from "@/lib/api/content/subjects";
+import { getPeriods, Period } from "@/lib/api/admin/periods";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
 
 const LESSON_TYPES = ["VIDEO", "AUDIO", "PDF", "PPT", "DOC"];
@@ -16,8 +17,10 @@ export default function LearningMaterialCreatePage() {
 
   const [subjects, setSubjects] = React.useState<SubjectRecord[]>([]);
   const [topics, setTopics] = React.useState<TopicRecord[]>([]);
+  const [periods, setPeriods] = React.useState<Period[]>([]);
   const [isLoadingSubjects, setIsLoadingSubjects] = React.useState(true);
   const [isLoadingTopics, setIsLoadingTopics] = React.useState(false);
+  const [isLoadingPeriods, setIsLoadingPeriods] = React.useState(true);
 
   const [title, setTitle] = React.useState("");
   const [description, setDescription] = React.useState("");
@@ -57,6 +60,21 @@ export default function LearningMaterialCreatePage() {
       }
     }
     fetchSubjectsList();
+  }, []);
+
+  React.useEffect(() => {
+    async function fetchPeriodsList() {
+      try {
+        setIsLoadingPeriods(true);
+        const data = await getPeriods();
+        setPeriods(data);
+      } catch (error) {
+        console.error("Failed to load periods:", error);
+      } finally {
+        setIsLoadingPeriods(false);
+      }
+    }
+    fetchPeriodsList();
   }, []);
 
   React.useEffect(() => {
@@ -295,14 +313,18 @@ export default function LearningMaterialCreatePage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="mb-2 block text-sm font-medium text-gray-800">Period</label>
-                <input
-                  type="number"
-                  min={1}
+                <select
                   value={period}
                   onChange={(event) => setPeriod(event.target.value)}
-                  placeholder="e.g. 1"
                   className="h-11 w-full rounded-lg border border-gray-300 px-3 text-gray-700 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500"
-                />
+                >
+                  <option value="">{isLoadingPeriods ? "Loading periods..." : "Select period"}</option>
+                  {periods.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="mb-2 block text-sm font-medium text-gray-800">

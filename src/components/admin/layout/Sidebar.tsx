@@ -24,6 +24,7 @@ const navItems: NavItem[] = [
   { href: "/admin/schools", label: "Schools", icon: "solar:buildings-2-bold" },
   { href: "/admin/county", label: "County", icon: "solar:map-point-bold" },
   { href: "/admin/district", label: "District", icon: "solar:buildings-bold" },
+  { href: "/admin/periods", label: "Periods", icon: "solar:calendar-bold" },
   { href: "/admin/report", label: "Report", icon: "solar:document-text-bold" },
 ];
 
