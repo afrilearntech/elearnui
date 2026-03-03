@@ -18,6 +18,7 @@ import {
 import { ApiClientError } from '@/lib/api/client';
 import { showErrorToast, showSuccessToast, formatErrorMessage } from '@/lib/toast';
 import Spinner from '@/components/ui/Spinner';
+import StudentLoadingScreen from '@/components/ui/StudentLoadingScreen';
 import { useAccessibility } from '@/contexts/AccessibilityContext';
 import { useAutoRead } from '@/hooks/useAutoRead';
 
@@ -298,11 +299,7 @@ export default function AssignmentDetailPage() {
 
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Spinner size="lg" />
-      </div>
-    );
+    return <StudentLoadingScreen title="Loading assignment details..." subtitle="Preparing questions and resources for you." />;
   }
 
   if (!assessment) {

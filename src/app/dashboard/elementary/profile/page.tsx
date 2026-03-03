@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Icon } from '@iconify/react';
 import ElementaryNavbar from '@/components/elementary/ElementaryNavbar';
 import ElementarySidebar from '@/components/elementary/ElementarySidebar';
+import StudentLoadingScreen from '@/components/ui/StudentLoadingScreen';
 import { changePassword, ChangePasswordRequest } from '@/lib/api/auth';
 import { showErrorToast, showSuccessToast, formatErrorMessage } from '@/lib/toast';
 import { ApiClientError } from '@/lib/api/client';
@@ -154,11 +155,7 @@ export default function ElementaryProfilePage() {
   };
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Spinner size="lg" />
-      </div>
-    );
+    return <StudentLoadingScreen title="Loading your profile..." subtitle="Preparing your account details." />;
   }
 
   if (!user) {

@@ -9,10 +9,10 @@ import ContinueLearningSection from '@/components/elementary/ContinueLearningSec
 import MagicChallengesSection from '@/components/elementary/MagicChallengesSection';
 import ExploreSubjectsSection from '@/components/elementary/ExploreSubjectsSection';
 import RecentAdventuresSection from '@/components/elementary/RecentAdventuresSection';
+import StudentLoadingScreen from '@/components/ui/StudentLoadingScreen';
 import { getElementaryDashboard } from '@/lib/api/dashboard';
 import { ApiClientError } from '@/lib/api/client';
 import { showErrorToast, formatErrorMessage } from '@/lib/toast';
-import Spinner from '@/components/ui/Spinner';
 
 export default function ElementaryDashboard() {
   const router = useRouter();
@@ -66,11 +66,7 @@ export default function ElementaryDashboard() {
   };
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Spinner size="lg" />
-      </div>
-    );
+    return <StudentLoadingScreen title="Loading your magical dashboard..." subtitle="Getting your lessons, stars, and adventures ready." />;
   }
 
   return (

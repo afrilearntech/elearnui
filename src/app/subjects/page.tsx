@@ -10,7 +10,7 @@ import ElementarySidebar from '@/components/elementary/ElementarySidebar';
 import { getElementarySubjectsAndLessons } from '@/lib/api/dashboard';
 import { ApiClientError } from '@/lib/api/client';
 import { showErrorToast, formatErrorMessage } from '@/lib/toast';
-import Spinner from '@/components/ui/Spinner';
+import StudentLoadingScreen from '@/components/ui/StudentLoadingScreen';
 
 function LessonThumbnail({ 
   thumbnail, 
@@ -234,11 +234,7 @@ export default function SubjectsLessonsPage() {
   ).sort((a, b) => a.name.localeCompare(b.name)); // Sort alphabetically for better UX
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Spinner size="lg" />
-      </div>
-    );
+    return <StudentLoadingScreen title="Loading subjects..." subtitle="Bringing your subjects and lessons into view." />;
   }
 
   return (

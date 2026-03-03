@@ -12,6 +12,7 @@ import { getGames, getGameById, Game } from '@/lib/api/games';
 import { ApiClientError } from '@/lib/api/client';
 import { showErrorToast, formatErrorMessage } from '@/lib/toast';
 import Spinner from '@/components/ui/Spinner';
+import StudentLoadingScreen from '@/components/ui/StudentLoadingScreen';
 
 interface GameCard {
   id: string;
@@ -620,11 +621,7 @@ export default function GamesPage() {
     : 0;
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Spinner size="lg" />
-      </div>
-    );
+    return <StudentLoadingScreen title="Loading games..." subtitle="Getting your fun challenges ready." />;
   }
 
   return (

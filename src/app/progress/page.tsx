@@ -9,7 +9,7 @@ import Image from 'next/image';
 import { getProgressGarden } from '@/lib/api/dashboard';
 import { ApiClientError } from '@/lib/api/client';
 import { showErrorToast, formatErrorMessage } from '@/lib/toast';
-import Spinner from '@/components/ui/Spinner';
+import StudentLoadingScreen from '@/components/ui/StudentLoadingScreen';
 
 interface Plant {
   id: number;
@@ -288,9 +288,10 @@ export default function ProgressPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-linear-to-br from-green-50 via-blue-50 to-purple-50 flex items-center justify-center">
-        <Spinner size="lg" />
-      </div>
+      <StudentLoadingScreen
+        title="Growing your progress garden..."
+        subtitle="Fetching your plants, streaks, and learning milestones."
+      />
     );
   }
 

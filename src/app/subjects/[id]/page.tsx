@@ -11,6 +11,7 @@ import { getLessonById, LessonDetail, markLessonTaken, getAllLessons, LessonList
 import { ApiClientError } from '@/lib/api/client';
 import { showErrorToast, formatErrorMessage } from '@/lib/toast';
 import Spinner from '@/components/ui/Spinner';
+import StudentLoadingScreen from '@/components/ui/StudentLoadingScreen';
 
 function VideoThumbnail({ 
   thumbnail, 
@@ -299,11 +300,7 @@ export default function SubjectLessonDetail() {
   };
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Spinner size="lg" />
-      </div>
-    );
+    return <StudentLoadingScreen title="Loading lesson..." subtitle="Preparing your lesson content and activities." />;
   }
 
   return (

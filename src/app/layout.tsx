@@ -51,7 +51,7 @@ export default function RootLayout({
           }}
           toastOptions={{
             className: '',
-            duration: 3500,
+             duration: 3500,
             removeDelay: 500,
             style: {
               fontFamily: 'Andika, sans-serif',

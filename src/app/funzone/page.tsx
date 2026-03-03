@@ -8,7 +8,7 @@ import { Icon } from '@iconify/react';
 import { getKidsGrades, LessonGrade, GeneralGrade } from '@/lib/api/dashboard';
 import { ApiClientError } from '@/lib/api/client';
 import { showErrorToast, formatErrorMessage } from '@/lib/toast';
-import Spinner from '@/components/ui/Spinner';
+import StudentLoadingScreen from '@/components/ui/StudentLoadingScreen';
 
 export default function FunzonePage() {
   const router = useRouter();
@@ -175,9 +175,10 @@ export default function FunzonePage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-linear-to-br from-[#DBEAFE] via-[#F0FDF4] to-[#CFFAFE] flex items-center justify-center">
-        <Spinner size="lg" />
-      </div>
+      <StudentLoadingScreen
+        title="Loading your grade room..."
+        subtitle="Bringing your lesson and assignment results."
+      />
     );
   }
 
