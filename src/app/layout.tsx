@@ -51,7 +51,8 @@ export default function RootLayout({
           }}
           toastOptions={{
             className: '',
-            duration: 4000,
+            duration: 3500,
+            removeDelay: 500,
             style: {
               fontFamily: 'Andika, sans-serif',
               padding: '16px 20px',
@@ -61,14 +62,14 @@ export default function RootLayout({
               lineHeight: '1.5',
             },
             success: {
-              duration: 4000,
+              duration: 3500,
               iconTheme: {
                 primary: '#FFFFFF',
                 secondary: '#10B981',
               },
             },
             error: {
-              duration: 5000,
+              duration: 4500,
               iconTheme: {
                 primary: '#FFFFFF',
                 secondary: '#EF4444',
