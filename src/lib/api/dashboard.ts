@@ -120,11 +120,23 @@ export interface ElementaryLesson {
   title: string;
   subject_id: number;
   subject_name: string;
+  topic_id?: number;
+  topic_name?: string;
+  period_id?: number;
+  period_name?: string;
   resource_type?: string;
   thumbnail: string | null;
   resource?: string | null;
   grade?: string;
   status?: string;
+  progression_status?: 'available' | 'completed' | 'locked' | string;
+  is_locked?: boolean;
+  is_completed?: boolean;
+  lock_reason?: string | null;
+  sequence_position?: number;
+  next_video_id?: number | null;
+  assessments_total?: number;
+  assessments_completed?: number;
 }
 
 export interface ElementarySubjectsAndLessonsResponse {

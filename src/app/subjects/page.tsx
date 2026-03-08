@@ -12,6 +12,8 @@ import { ApiClientError } from '@/lib/api/client';
 import { showErrorToast, formatErrorMessage } from '@/lib/toast';
 import StudentLoadingScreen from '@/components/ui/StudentLoadingScreen';
 
+type SubjectMediaTab = 'video' | 'audio' | 'file';
+
 function LessonThumbnail({ 
   thumbnail, 
   fallbackSrc, 
@@ -159,13 +161,57 @@ function getLessonTypeInfo(type: string | undefined) {
   };
 }
 
+function getMediaGroup(type: string | undefined): SubjectMediaTab {
+  const normalizedType = type?.toUpperCase()?.trim() || '';
+  if (normalizedType === 'VIDEO') return 'video';
+  if (normalizedType === 'AUDIO') return 'audio';
+  return 'file';
+}
+
+function getMediaTabLabel(tab: SubjectMediaTab): string {
+  if (tab === 'video') return 'Videos';
+  if (tab === 'audio') return 'Audios';
+  return 'Files';
+}
+
+function getMediaTabEmptyMessage(tab: SubjectMediaTab): string {
+  if (tab === 'video') return 'No videos yet for this subject.';
+  if (tab === 'audio') return 'No audios yet for this subject.';
+  return 'No files yet for this subject.';
+}
+
+function getLessonProgressState(lesson: any) {
+  const isCompleted =
+    Boolean(lesson.is_completed) ||
+    lesson.progression_status === 'completed' ||
+    lesson.status === 'taken';
+
+  const isAvailable =
+    isCompleted ||
+    lesson.progression_status === 'available' ||
+    !lesson.is_locked;
+
+  const isLocked = !isAvailable;
+
+  return {
+    isCompleted,
+    isAvailable,
+    isLocked,
+    lockReason:
+      lesson.lock_reason ||
+      'Finish the current lesson first to unlock this one.',
+  };
+}
+
 export default function SubjectsLessonsPage() {
   const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [lessons, setLessons] = useState<any[]>([]);
   const [subjects, setSubjects] = useState<any[]>([]);
-  const [selectedSubject, setSelectedSubject] = useState<string>('all');
+  const [selectedSubject, setSelectedSubject] = useState<string>('');
+  const [selectedMediaTab, setSelectedMediaTab] = useState<SubjectMediaTab>('video');
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -195,6 +241,13 @@ export default function SubjectsLessonsPage() {
           resource: lesson.resource,
           grade: lesson.grade,
           status: lesson.status,
+          progression_status: lesson.progression_status,
+          is_locked: lesson.is_locked,
+          is_completed: lesson.is_completed,
+          lock_reason: lesson.lock_reason,
+          sequence_position: lesson.sequence_position,
+          period_name: lesson.period_name,
+          next_video_id: lesson.next_video_id,
         }));
         
         setSubjects(subjectsData);
@@ -204,6 +257,10 @@ export default function SubjectsLessonsPage() {
         const subjectIdParam = urlParams.get('subjectId');
         if (subjectIdParam && subjectsData.some((s: any) => s.id.toString() === subjectIdParam)) {
           setSelectedSubject(subjectIdParam);
+        } else if (subjectsData.length > 0) {
+          // Default to first subject (alphabetical list shown below) for cleaner UX.
+          const firstSubject = [...subjectsData].sort((a, b) => a.name.localeCompare(b.name))[0];
+          setSelectedSubject(firstSubject.id.toString());
         }
       } catch (error) {
         const errorMessage = error instanceof ApiClientError
@@ -223,15 +280,49 @@ export default function SubjectsLessonsPage() {
   const handleMenuToggle = () => setIsMobileMenuOpen(!isMobileMenuOpen);
   const handleMenuClose = () => setIsMobileMenuOpen(false);
 
-  // Filter lessons based on selected subject
-  const filteredLessons = selectedSubject === 'all'
-    ? lessons
-    : lessons.filter((lesson) => lesson.subject_id === parseInt(selectedSubject));
+  // Filter lessons based on selected subject first
+  const selectedSubjectLessons = selectedSubject
+    ? lessons.filter((lesson) => lesson.subject_id === parseInt(selectedSubject))
+    : [];
+
+  const videoLessons = selectedSubjectLessons.filter((lesson) => getMediaGroup(lesson.type || lesson.resource_type) === 'video');
+  const audioLessons = selectedSubjectLessons.filter((lesson) => getMediaGroup(lesson.type || lesson.resource_type) === 'audio');
+  const fileLessons = selectedSubjectLessons.filter((lesson) => getMediaGroup(lesson.type || lesson.resource_type) === 'file');
+
+  const mediaTabCounts: Record<SubjectMediaTab, number> = {
+    video: videoLessons.length,
+    audio: audioLessons.length,
+    file: fileLessons.length,
+  };
+
+  const tabLessonsMap: Record<SubjectMediaTab, any[]> = {
+    video: videoLessons,
+    audio: audioLessons,
+    file: fileLessons,
+  };
+
+  const filteredLessons = tabLessonsMap[selectedMediaTab]
+    .filter((lesson) =>
+      lesson.title?.toLowerCase().includes(searchQuery.trim().toLowerCase())
+    )
+    .sort((a, b) => {
+      const seqA = typeof a.sequence_position === 'number' ? a.sequence_position : Number.MAX_SAFE_INTEGER;
+      const seqB = typeof b.sequence_position === 'number' ? b.sequence_position : Number.MAX_SAFE_INTEGER;
+      if (seqA !== seqB) return seqA - seqB;
+      return a.id - b.id;
+    });
 
   // Get unique subjects (deduplicate by ID to ensure correct filtering)
   const uniqueSubjects = Array.from(
     new Map(subjects.map((s) => [s.id, s])).values()
   ).sort((a, b) => a.name.localeCompare(b.name)); // Sort alphabetically for better UX
+
+  useEffect(() => {
+    setSearchQuery('');
+  }, [selectedSubject]);
+
+  const selectedSubjectName =
+    uniqueSubjects.find((subject) => subject.id.toString() === selectedSubject)?.name || 'this subject';
 
   if (isLoading) {
     return <StudentLoadingScreen title="Loading subjects..." subtitle="Bringing your subjects and lessons into view." />;
@@ -258,18 +349,6 @@ export default function SubjectsLessonsPage() {
 
             {/* Subject Filters */}
             <div className="flex flex-wrap items-center gap-3 sm:ml-8 sm:mr-8 mb-6">
-              <button
-                onClick={() => setSelectedSubject('all')}
-                className={`px-4 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 transition-all ${
-                  selectedSubject === 'all'
-                    ? 'bg-[#60A5FA] text-white shadow-sm'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-                style={{ fontFamily: 'Andika, sans-serif' }}
-              >
-                <Icon icon="mdi:file-document-outline" width={18} height={18} />
-                All Subjects
-              </button>
               {uniqueSubjects.map((subject) => {
                 const subjectName = subject.name.toLowerCase();
                 let icon = 'mdi:book-open-outline';
@@ -304,26 +383,108 @@ export default function SubjectsLessonsPage() {
               })}
             </div>
 
+            {/* Media Type Tabs + Search */}
+            <div className="sm:ml-8 sm:mr-8 mb-6 space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => setSelectedMediaTab('video')}
+                  className={`px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 transition-all ${
+                    selectedMediaTab === 'video'
+                      ? 'bg-red-500 text-white shadow-sm'
+                      : 'bg-white text-gray-700 border border-gray-200 hover:bg-red-50'
+                  }`}
+                  style={{ fontFamily: 'Andika, sans-serif' }}
+                >
+                  <Icon icon="mdi:play-circle" width={18} height={18} />
+                  Videos
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${selectedMediaTab === 'video' ? 'bg-white/20' : 'bg-gray-100'}`}>
+                    {mediaTabCounts.video}
+                  </span>
+                </button>
+                <button
+                  onClick={() => setSelectedMediaTab('audio')}
+                  className={`px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 transition-all ${
+                    selectedMediaTab === 'audio'
+                      ? 'bg-purple-500 text-white shadow-sm'
+                      : 'bg-white text-gray-700 border border-gray-200 hover:bg-purple-50'
+                  }`}
+                  style={{ fontFamily: 'Andika, sans-serif' }}
+                >
+                  <Icon icon="mdi:headphones" width={18} height={18} />
+                  Audios
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${selectedMediaTab === 'audio' ? 'bg-white/20' : 'bg-gray-100'}`}>
+                    {mediaTabCounts.audio}
+                  </span>
+                </button>
+                <button
+                  onClick={() => setSelectedMediaTab('file')}
+                  className={`px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 transition-all ${
+                    selectedMediaTab === 'file'
+                      ? 'bg-blue-500 text-white shadow-sm'
+                      : 'bg-white text-gray-700 border border-gray-200 hover:bg-blue-50'
+                  }`}
+                  style={{ fontFamily: 'Andika, sans-serif' }}
+                >
+                  <Icon icon="mdi:file-document-outline" width={18} height={18} />
+                  Files
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${selectedMediaTab === 'file' ? 'bg-white/20' : 'bg-gray-100'}`}>
+                    {mediaTabCounts.file}
+                  </span>
+                </button>
+              </div>
+
+              <div className="max-w-md">
+                <div className="relative">
+                  <Icon icon="mdi:magnify" width={20} height={20} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder={`Search ${selectedMediaTab === 'video' ? 'videos' : selectedMediaTab === 'audio' ? 'audios' : 'files'}...`}
+                    className="w-full h-11 pl-10 pr-4 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#60A5FA] focus:border-[#60A5FA]"
+                    style={{ fontFamily: 'Andika, sans-serif' }}
+                  />
+                </div>
+              </div>
+            </div>
+
             {/* Grid of lesson cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mt-6 sm:ml-8 sm:mr-8">
               {filteredLessons.length > 0 ? (
                 filteredLessons.map((lesson, index) => {
                   const borderColor = getBorderColor(index);
-                  const playColor = getPlayColor(index);
                   const fallbackImage = getFallbackImage(index);
                   const typeInfo = getLessonTypeInfo(lesson.type || lesson.resource_type);
+                  const progressState = getLessonProgressState(lesson);
+                  const progressBadge = progressState.isCompleted
+                    ? {
+                        label: 'Completed',
+                        icon: 'mdi:check-circle',
+                        className: 'bg-emerald-500 text-white',
+                      }
+                    : progressState.isLocked
+                    ? {
+                        label: 'Locked',
+                        icon: 'mdi:lock',
+                        className: 'bg-gray-500 text-white',
+                      }
+                    : {
+                        label: 'Ready',
+                        icon: 'mdi:lock-open-variant',
+                        className: 'bg-blue-500 text-white',
+                      };
 
-                  return (
-                    <Link href={`/subjects/${lesson.id}`} key={lesson.id} className={`bg-white rounded-xl shadow-md overflow-hidden border ${borderColor} hover:shadow-lg transition-shadow duration-200`}>
-                  {/* Thumbnail */}
-                  <div className="relative h-[160px] w-full">
+                  const cardContent = (
+                    <>
+                      {/* Thumbnail */}
+                      <div className="relative h-[160px] w-full">
                         <LessonThumbnail 
                           thumbnail={lesson.thumbnail} 
                           fallbackSrc={fallbackImage}
                           alt={lesson.title}
                         />
-                        <div className="absolute inset-0 bg-linear-to-t from-black/30 to-transparent" />
-                        
+                        <div className={`absolute inset-0 bg-linear-to-t ${progressState.isLocked ? 'from-black/60' : 'from-black/30'} to-transparent`} />
+
                         {/* Type Badge - Top Right */}
                         <div className={`absolute top-2 right-2 ${typeInfo.color} ${typeInfo.textColor} px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-md`}>
                           <Icon icon={typeInfo.icon} width={14} height={14} />
@@ -331,35 +492,111 @@ export default function SubjectsLessonsPage() {
                             {typeInfo.label}
                           </span>
                         </div>
-                        
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className={`w-12 h-12 ${typeInfo.bgColor} rounded-full flex items-center justify-center shadow-lg border-2 ${typeInfo.borderColor}`}>
-                            <Icon icon={typeInfo.icon} width={22} height={22} className={typeInfo.color.replace('bg-', 'text-')} />
-                      </div>
-                    </div>
-                  </div>
 
-                  {/* Content */}
-                  <div className="p-4">
+                        {/* Progress Badge - Top Left */}
+                        <div className={`absolute top-2 left-2 px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-md ${progressBadge.className}`}>
+                          <Icon icon={progressBadge.icon} width={14} height={14} />
+                          <span className="text-[10px] font-semibold" style={{ fontFamily: 'Andika, sans-serif' }}>
+                            {progressBadge.label}
+                          </span>
+                        </div>
+
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className={`w-12 h-12 ${typeInfo.bgColor} rounded-full flex items-center justify-center shadow-lg border-2 ${typeInfo.borderColor}`}>
+                            <Icon icon={progressState.isLocked ? 'mdi:lock' : typeInfo.icon} width={22} height={22} className={progressState.isLocked ? 'text-gray-500' : typeInfo.color.replace('bg-', 'text-')} />
+                          </div>
+                        </div>
+
+                        {progressState.isLocked && (
+                          <div className="absolute inset-0 z-10 flex items-end justify-center p-3 bg-black/55 backdrop-blur-[1.5px]">
+                            <div className="w-full rounded-xl border border-white/25 bg-white/20 px-3 py-2 text-white shadow-md">
+                              <div className="flex items-center gap-1.5 mb-1">
+                                <Icon icon="mdi:lock-outline" width={14} height={14} />
+                                <span className="text-[11px] font-semibold" style={{ fontFamily: 'Andika, sans-serif' }}>
+                                  Locked for now
+                                </span>
+                              </div>
+                              <p className="text-[10px] leading-4 text-white/95 line-clamp-2" style={{ fontFamily: 'Andika, sans-serif' }}>
+                                Finish the current lesson to unlock this one.
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Content */}
+                      <div className="p-4">
                         <h3 className="text-[16px] font-semibold text-gray-900 mb-1 line-clamp-2" style={{ fontFamily: 'Andika, sans-serif' }}>{lesson.title}</h3>
                         <p className="text-[12px] text-gray-600 mb-3" style={{ fontFamily: 'Andika, sans-serif' }}>
-                          {typeInfo.action} and explore with fun activities
+                          {progressState.isLocked
+                            ? progressState.lockReason
+                            : progressState.isCompleted
+                            ? 'Great job! You already completed this lesson.'
+                            : `${typeInfo.action} this lesson to unlock the next one.`}
                         </p>
-                    <div className="flex items-center justify-between">
-                          <span className="text-[10px] px-2 py-0.5 rounded-lg bg-gray-100 text-gray-700" style={{ fontFamily: 'Andika, sans-serif' }}>{lesson.subject_name}</span>
-                          <span className={`text-[10px] px-2 py-0.5 rounded-lg ${typeInfo.bgColor} ${typeInfo.color.replace('bg-', 'text-')} font-medium`} style={{ fontFamily: 'Andika, sans-serif' }}>
-                            {typeInfo.label}
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] px-2 py-0.5 rounded-lg bg-gray-100 text-gray-700" style={{ fontFamily: 'Andika, sans-serif' }}>
+                            {lesson.subject_name}
                           </span>
-                    </div>
-                  </div>
-                </Link>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-lg ${typeInfo.bgColor} ${typeInfo.color.replace('bg-', 'text-')} font-medium`} style={{ fontFamily: 'Andika, sans-serif' }}>
+                            {typeof lesson.sequence_position === 'number' ? `Lesson ${lesson.sequence_position}` : typeInfo.label}
+                          </span>
+                        </div>
+                      </div>
+                    </>
+                  );
+
+                  return (
+                    progressState.isLocked ? (
+                      <article
+                        key={lesson.id}
+                        aria-disabled="true"
+                        className={`bg-white rounded-xl shadow-md overflow-hidden border ${borderColor} cursor-not-allowed`}
+                      >
+                        {cardContent}
+                      </article>
+                    ) : (
+                      <Link
+                        href={`/subjects/${lesson.id}`}
+                        key={lesson.id}
+                        className={`bg-white rounded-xl shadow-md overflow-hidden border ${borderColor} hover:shadow-lg transition-shadow duration-200`}
+                      >
+                        {cardContent}
+                      </Link>
+                    )
                   );
                 })
               ) : (
-                <div className="col-span-full text-center py-12">
-                  <p className="text-gray-600" style={{ fontFamily: 'Andika, sans-serif' }}>
-                    No lessons available. {selectedSubject !== 'all' ? 'Try selecting a different subject.' : 'Check back later for new lessons!'}
-                  </p>
+                <div className="col-span-full">
+                  <div className="bg-white/95 border border-gray-200 rounded-2xl p-8 text-center shadow-sm">
+                    <div className="mx-auto mb-4 w-16 h-16 rounded-2xl bg-[#EEF2FF] flex items-center justify-center">
+                      <Icon
+                        icon={
+                          selectedMediaTab === 'video'
+                            ? 'mdi:play-box-multiple-outline'
+                            : selectedMediaTab === 'audio'
+                            ? 'mdi:headphones-box'
+                            : 'mdi:file-cabinet-outline'
+                        }
+                        width={34}
+                        height={34}
+                        className="text-[#6366F1]"
+                      />
+                    </div>
+                    <h3 className="text-lg font-bold text-[#4338CA] mb-1" style={{ fontFamily: 'Andika, sans-serif' }}>
+                      {getMediaTabLabel(selectedMediaTab)} for {selectedSubjectName}
+                    </h3>
+                    <p className="text-gray-600 mb-4" style={{ fontFamily: 'Andika, sans-serif' }}>
+                      {searchQuery.trim()
+                        ? `No results in ${getMediaTabLabel(selectedMediaTab)} for "${searchQuery}".`
+                        : getMediaTabEmptyMessage(selectedMediaTab)}
+                    </p>
+                    <p className="text-sm text-gray-500" style={{ fontFamily: 'Andika, sans-serif' }}>
+                      {searchQuery.trim()
+                        ? 'Try a shorter word, or clear the search and explore more.'
+                        : 'Pick another tab or subject to continue your adventure.'}
+                    </p>
+                  </div>
                 </div>
               )}
             </div>
