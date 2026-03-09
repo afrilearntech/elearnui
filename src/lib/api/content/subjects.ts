@@ -27,12 +27,20 @@ export async function getSubjects(token: string): Promise<SubjectRecord[]> {
     throw new ApiClientError("Authentication token is missing", 401);
   }
 
-  return apiRequest<SubjectRecord[]>("/content/subjects/", {
+  const response = await apiRequest<
+    SubjectRecord[] | { results?: SubjectRecord[]; subjects?: SubjectRecord[]; data?: SubjectRecord[] }
+  >("/content/subjects/?limit=1000", {
     method: "GET",
     headers: {
       Authorization: `Token ${token}`,
     },
   });
+
+  if (Array.isArray(response)) return response;
+  if (Array.isArray(response.results)) return response.results;
+  if (Array.isArray(response.subjects)) return response.subjects;
+  if (Array.isArray(response.data)) return response.data;
+  return [];
 }
 
 export type CreateSubjectRequest = {
@@ -154,13 +162,21 @@ export async function getTopics(token: string, subjectId: number): Promise<Topic
     throw new ApiClientError("Subject ID is required", 400);
   }
 
-  const url = `/topics/?subject=${subjectId}`;
-  return apiRequest<TopicRecord[]>(url, {
+  const url = `/topics/?subject=${subjectId}&limit=1000`;
+  const response = await apiRequest<
+    TopicRecord[] | { results?: TopicRecord[]; topics?: TopicRecord[]; data?: TopicRecord[] }
+  >(url, {
     method: "GET",
     headers: {
       Authorization: `Token ${token}`,
     },
   });
+
+  if (Array.isArray(response)) return response;
+  if (Array.isArray(response.results)) return response.results;
+  if (Array.isArray(response.topics)) return response.topics;
+  if (Array.isArray(response.data)) return response.data;
+  return [];
 }
 
 export type SubjectDetailRecord = {
