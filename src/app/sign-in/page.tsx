@@ -106,8 +106,10 @@ export default function SignInPage() {
         router.push("/admin/sign-in");
       } else if (selectedNonStudentRole === "content-manager") {
         router.push("/content/sign-in");
-      } else if (selectedNonStudentRole === "parent" || selectedNonStudentRole === "teacher") {
-        router.push("/parent-teacher/sign-in");
+      } else if (selectedNonStudentRole === "parent") {
+        router.push("/parent-teacher/sign-in/parent");
+      } else if (selectedNonStudentRole === "teacher") {
+        router.push("/parent-teacher/sign-in/teacher");
       } else {
         router.push("/content/sign-in");
       }

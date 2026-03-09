@@ -163,9 +163,14 @@ export default function MyAssignmentsPage() {
       try {
         const data = await getKidsAssessments(token);
         
+        // Hide assessments that have no questions for better student UX
+        const assessmentsWithQuestions = (data.assessments || []).filter(
+          (assessment) => assessment.has_questions !== false
+        );
+
         // Separate lesson and general assessments
-        const lessonAssessments = (data.assessments || []).filter(a => a.type === 'lesson' && a.lesson_id);
-        const generalAssessments = (data.assessments || []).filter(a => a.type === 'general' || !a.lesson_id);
+        const lessonAssessments = assessmentsWithQuestions.filter(a => a.type === 'lesson' && a.lesson_id);
+        const generalAssessments = assessmentsWithQuestions.filter(a => a.type === 'general' || !a.lesson_id);
         
         // Sort lesson assessments by lesson_id (sequential order)
         lessonAssessments.sort((a, b) => (a.lesson_id || 0) - (b.lesson_id || 0));
@@ -259,7 +264,7 @@ export default function MyAssignmentsPage() {
     : assessments.filter((assessment) => !assessment.isSubmitted && assessment.displayStatus === filter);
 
   if (isLoading) {
-    return <StudentLoadingScreen title="Loading assignments..." subtitle="Fetching your latest tasks and due dates." />;
+    return <StudentLoadingScreen title="Loading assessments..." subtitle="Fetching your latest tasks and due dates." />;
   }
 
   return (
@@ -428,7 +433,7 @@ export default function MyAssignmentsPage() {
                   
                   return (
                     <Link
-                      href={assessment.isLocked ? '#' : `/assignments/${assessment.id}`}
+                      href={assessment.isLocked ? '#' : `/assessments/${assessment.id}`}
                       key={assessment.id}
                       onClick={handleCardClick}
                       aria-label={cardAriaLabel}

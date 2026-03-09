@@ -264,6 +264,7 @@ export interface KidsAssessment {
   type: string;
   lesson_id?: number;
   marks: number;
+  has_questions?: boolean;
 }
 
 export interface KidsAssessmentsResponse {

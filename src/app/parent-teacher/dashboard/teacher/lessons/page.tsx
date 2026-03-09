@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import DashboardLayout from "@/components/parent-teacher/layout/DashboardLayout";
 import { Icon } from "@iconify/react";
-import { getTeacherLessons, TeacherLesson } from "@/lib/api/parent-teacher/teacher";
+import { getTeacherLessons, TeacherLesson, getTeacherSubjects, TeacherSubject } from "@/lib/api/parent-teacher/teacher";
 import { showErrorToast } from "@/lib/toast";
 import CreateLessonModal from "@/components/parent-teacher/teacher/CreateLessonModal";
 
@@ -37,6 +37,17 @@ const getTypeColor = (type: string) => {
     default:
       return "bg-gray-100 text-gray-800 border-gray-200";
   }
+};
+
+const getGradeColor = (grade: string) => {
+  const normalizedGrade = grade.toUpperCase();
+  if (normalizedGrade.includes("GRADE 1")) return "bg-pink-100 text-pink-800 border-pink-200";
+  if (normalizedGrade.includes("GRADE 2")) return "bg-purple-100 text-purple-800 border-purple-200";
+  if (normalizedGrade.includes("GRADE 3")) return "bg-sky-100 text-sky-800 border-sky-200";
+  if (normalizedGrade.includes("GRADE 4")) return "bg-blue-100 text-blue-800 border-blue-200";
+  if (normalizedGrade.includes("GRADE 5")) return "bg-orange-100 text-orange-800 border-orange-200";
+  if (normalizedGrade.includes("GRADE 6")) return "bg-emerald-100 text-emerald-800 border-emerald-200";
+  return "bg-gray-100 text-gray-800 border-gray-200";
 };
 
 const formatDate = (dateString: string) => {
@@ -218,22 +229,27 @@ function LessonDetailsModal({ lesson, isOpen, onClose }: LessonDetailsModalProps
 
 export default function LessonsPage() {
   const [lessons, setLessons] = useState<TeacherLesson[]>([]);
+  const [subjects, setSubjects] = useState<TeacherSubject[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [selectedGrade, setSelectedGrade] = useState<string>("All");
+  const [selectedSubjectId, setSelectedSubjectId] = useState<string>("All");
   const [selectedType, setSelectedType] = useState<string>("All");
   const [selectedStatus, setSelectedStatus] = useState<string>("All");
   const [selectedLesson, setSelectedLesson] = useState<TeacherLesson | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [page, setPage] = useState(1);
-  const pageSize = 10;
 
   useEffect(() => {
     const fetchLessons = async () => {
       try {
         setIsLoading(true);
-        const data = await getTeacherLessons();
-        setLessons(data);
+        const [lessonsData, subjectsData] = await Promise.all([
+          getTeacherLessons(),
+          getTeacherSubjects(),
+        ]);
+        setLessons(lessonsData);
+        setSubjects(subjectsData);
       } catch (error) {
         console.error("Error fetching lessons:", error);
         showErrorToast("Failed to load lessons. Please try again.");
@@ -245,28 +261,84 @@ export default function LessonsPage() {
     fetchLessons();
   }, []);
 
+  const subjectMap = useMemo(() => {
+    return subjects.reduce<Record<number, TeacherSubject>>((acc, subject) => {
+      acc[subject.id] = subject;
+      return acc;
+    }, {});
+  }, [subjects]);
+
+  const lessonsWithSubjectMeta = useMemo(() => {
+    return lessons.map((lesson) => {
+      const matchedSubject = subjectMap[lesson.subject];
+      return {
+        ...lesson,
+        subjectName: matchedSubject?.name || `Subject #${lesson.subject}`,
+        grade: matchedSubject?.grade || "Unassigned Grade",
+      };
+    });
+  }, [lessons, subjectMap]);
+
   const filteredLessons = useMemo(() => {
-    return lessons.filter((lesson) => {
+    const normalizedSearch = search.trim().toLowerCase();
+
+    return lessonsWithSubjectMeta.filter((lesson) => {
       const matchesSearch =
-        search.trim().length === 0 ||
-        lesson.title.toLowerCase().includes(search.toLowerCase()) ||
-        lesson.description?.toLowerCase().includes(search.toLowerCase());
+        normalizedSearch.length === 0 ||
+        lesson.title.toLowerCase().includes(normalizedSearch) ||
+        lesson.description?.toLowerCase().includes(normalizedSearch) ||
+        lesson.subjectName.toLowerCase().includes(normalizedSearch) ||
+        lesson.grade.toLowerCase().includes(normalizedSearch);
 
       const matchesType = selectedType === "All" || lesson.type.toUpperCase() === selectedType.toUpperCase();
       const matchesStatus =
         selectedStatus === "All" || lesson.status.toUpperCase() === selectedStatus.toUpperCase();
+      const matchesGrade = selectedGrade === "All" || lesson.grade === selectedGrade;
+      const matchesSubject =
+        selectedSubjectId === "All" || lesson.subject.toString() === selectedSubjectId;
 
-      return matchesSearch && matchesType && matchesStatus;
+      return matchesSearch && matchesType && matchesStatus && matchesGrade && matchesSubject;
     });
-  }, [lessons, search, selectedType, selectedStatus]);
+  }, [lessonsWithSubjectMeta, search, selectedType, selectedStatus, selectedGrade, selectedSubjectId]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredLessons.length / pageSize));
-  const currentPage = Math.min(page, totalPages);
-  const start = (currentPage - 1) * pageSize;
-  const pagedLessons = filteredLessons.slice(start, start + pageSize);
-
-  const types = ["All", ...Array.from(new Set(lessons.map((l) => l.type)))];
+  const types = ["All", ...Array.from(new Set(lessonsWithSubjectMeta.map((l) => l.type)))];
+  const grades = ["All", ...Array.from(new Set(lessonsWithSubjectMeta.map((l) => l.grade)))];
+  const gradeTabOptions = ["All", ...grades.filter((grade) => grade !== "All")];
+  const allSubjectOptions = [
+    ...Array.from(
+      new Map(
+        lessonsWithSubjectMeta.map((lesson) => [
+          lesson.subject,
+          { id: lesson.subject.toString(), name: lesson.subjectName },
+        ])
+      ).values()
+    ).sort((a, b) => a.name.localeCompare(b.name)),
+  ];
+  const subjectOptions = [
+    { id: "All", name: "All Subjects" },
+    ...allSubjectOptions.filter((subject) => {
+      if (selectedGrade === "All") return true;
+      return lessonsWithSubjectMeta.some(
+        (lesson) => lesson.subject.toString() === subject.id && lesson.grade === selectedGrade
+      );
+    }),
+  ];
   const statuses = ["All", "DRAFT", "PENDING", "APPROVED", "REJECTED", "REVIEW_REQUESTED"];
+  const sortedLessons = useMemo(() => {
+    return [...filteredLessons].sort((a, b) => {
+      const subjectComparison = a.subjectName.localeCompare(b.subjectName);
+      if (subjectComparison !== 0) return subjectComparison;
+      return b.created_at.localeCompare(a.created_at);
+    });
+  }, [filteredLessons]);
+
+  useEffect(() => {
+    if (selectedSubjectId === "All") return;
+    const existsInOptions = subjectOptions.some((subject) => subject.id === selectedSubjectId);
+    if (!existsInOptions) {
+      setSelectedSubjectId("All");
+    }
+  }, [selectedSubjectId, subjectOptions]);
 
   const handleView = (lesson: TeacherLesson) => {
     setSelectedLesson(lesson);
@@ -282,14 +354,11 @@ export default function LessonsPage() {
     try {
       const data = await getTeacherLessons();
       setLessons(data);
+      const subjectsData = await getTeacherSubjects();
+      setSubjects(subjectsData);
     } catch (error) {
       console.error("Error refreshing lessons:", error);
     }
-  };
-
-  const handlePageChange = (newPage: number) => {
-    setPage(newPage);
-    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   if (isLoading) {
@@ -323,6 +392,34 @@ export default function LessonsPage() {
         </div>
 
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+          {/* Grade Tabs */}
+          <div className="mb-6">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Grades</p>
+            <div className="overflow-x-auto">
+              <div className="flex items-center gap-2 min-w-max">
+                {gradeTabOptions.map((grade) => {
+                  const isSelected = selectedGrade === grade;
+                  const gradeCount = grade === "All"
+                    ? lessonsWithSubjectMeta.length
+                    : lessonsWithSubjectMeta.filter((lesson) => lesson.grade === grade).length;
+                  return (
+                    <button
+                      key={grade}
+                      onClick={() => setSelectedGrade(grade)}
+                      className={`px-4 py-2 rounded-full text-sm font-medium border transition-colors ${
+                        isSelected
+                          ? "bg-emerald-600 text-white border-emerald-600"
+                          : "bg-white text-gray-700 border-gray-300 hover:border-emerald-300 hover:bg-emerald-50"
+                      }`}
+                    >
+                      {grade === "All" ? "All Grades" : grade} ({gradeCount})
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
           {/* Filters */}
           <div className="flex flex-col lg:flex-row gap-4 mb-6">
             <div className="flex-1 min-w-0">
@@ -333,28 +430,40 @@ export default function LessonsPage() {
                 />
                 <input
                   type="text"
-                  placeholder="Search by title or description..."
+                  placeholder="Search by title, description, grade, or subject..."
                   value={search}
                   onChange={(e) => {
                     setSearch(e.target.value);
-                    setPage(1);
                   }}
                   className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-gray-900 bg-white placeholder:text-gray-400"
                 />
               </div>
             </div>
-            <div className="flex flex-col sm:flex-row gap-4 sm:w-auto">
+
+            <div className="flex flex-col sm:flex-row gap-4 sm:w-auto flex-wrap">
+              <select
+                value={selectedSubjectId}
+                onChange={(e) => {
+                  setSelectedSubjectId(e.target.value);
+                }}
+                className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-gray-900 bg-white text-sm"
+              >
+                {subjectOptions.map((subject) => (
+                  <option key={subject.id} value={subject.id}>
+                    {subject.name}
+                  </option>
+                ))}
+              </select>
               <select
                 value={selectedType}
                 onChange={(e) => {
                   setSelectedType(e.target.value);
-                  setPage(1);
                 }}
                 className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-gray-900 bg-white text-sm"
               >
                 {types.map((type) => (
                   <option key={type} value={type}>
-                    {type}
+                    {type === "All" ? "All Resource Types" : type}
                   </option>
                 ))}
               </select>
@@ -362,48 +471,54 @@ export default function LessonsPage() {
                 value={selectedStatus}
                 onChange={(e) => {
                   setSelectedStatus(e.target.value);
-                  setPage(1);
                 }}
                 className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-gray-900 bg-white text-sm"
               >
                 {statuses.map((status) => (
                   <option key={status} value={status}>
-                    {status}
+                    {status === "All" ? "All Statuses" : status}
                   </option>
                 ))}
               </select>
+              <button
+                onClick={() => {
+                  setSearch("");
+                  setSelectedGrade("All");
+                  setSelectedSubjectId("All");
+                  setSelectedType("All");
+                  setSelectedStatus("All");
+                }}
+                className="px-4 py-3 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-200 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                Reset Filters
+              </button>
             </div>
           </div>
 
-          {/* Table */}
-          {pagedLessons.length > 0 ? (
+          <div className="mb-4 text-sm text-gray-600">
+            Showing <span className="font-semibold text-gray-900">{filteredLessons.length}</span> lesson
+            {filteredLessons.length !== 1 ? "s" : ""} in{" "}
+            <span className="font-semibold text-gray-900">{selectedGrade === "All" ? "all grades" : selectedGrade}</span>
+          </div>
+
+          {/* Lessons Table */}
+          {sortedLessons.length > 0 ? (
             <>
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto rounded-lg border border-gray-200">
                 <table className="w-full">
                   <thead>
-                    <tr className="border-b border-gray-200">
-                      <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">
-                        Lesson
-                      </th>
-                      <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">
-                        Type
-                      </th>
-                      <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">
-                        Status
-                      </th>
-                      <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">
-                        Duration
-                      </th>
-                      <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">
-                        Created
-                      </th>
-                      <th className="text-right py-3 px-4 text-xs font-semibold text-gray-600 uppercase">
-                        Actions
-                      </th>
+                    <tr className="border-b border-gray-200 bg-gray-50">
+                      <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">Lesson</th>
+                      <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">Subject</th>
+                      <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">Grade</th>
+                      <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">Status</th>
+                      <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">Duration</th>
+                      <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">Created</th>
+                      <th className="text-right py-3 px-4 text-xs font-semibold text-gray-600 uppercase">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {pagedLessons.map((lesson) => (
+                  <tbody className="divide-y divide-gray-100">
+                    {sortedLessons.map((lesson) => (
                       <tr key={lesson.id} className="hover:bg-gray-50 transition-colors">
                         <td className="py-4 px-4">
                           <div className="flex items-center gap-3">
@@ -419,29 +534,29 @@ export default function LessonsPage() {
                             )}
                             <div>
                               <p className="font-semibold text-gray-900">{lesson.title}</p>
-                              {lesson.description && (
-                                <p className="text-xs text-gray-500 line-clamp-1 mt-0.5">
-                                  {lesson.description}
-                                </p>
-                              )}
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border ${getTypeColor(lesson.type)}`}>
+                                  {lesson.type}
+                                </span>
+                                {lesson.description && (
+                                  <p className="text-xs text-gray-500 line-clamp-1">
+                                    {lesson.description}
+                                  </p>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </td>
                         <td className="py-4 px-4">
-                          <span
-                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${getTypeColor(
-                              lesson.type
-                            )}`}
-                          >
-                            {lesson.type}
+                          <span className="text-sm font-medium text-gray-800">{lesson.subjectName}</span>
+                        </td>
+                        <td className="py-4 px-4">
+                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${getGradeColor(lesson.grade)}`}>
+                            {lesson.grade}
                           </span>
                         </td>
                         <td className="py-4 px-4">
-                          <span
-                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${getStatusColor(
-                              lesson.status
-                            )}`}
-                          >
+                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${getStatusColor(lesson.status)}`}>
                             {lesson.status}
                           </span>
                         </td>
@@ -469,62 +584,6 @@ export default function LessonsPage() {
                   </tbody>
                 </table>
               </div>
-
-              {/* Pagination */}
-              {totalPages > 1 && (
-                <div className="mt-6 flex items-center justify-between flex-col sm:flex-row gap-4">
-                  <div className="text-sm text-gray-600">
-                    Showing {start + 1} to {Math.min(start + pageSize, filteredLessons.length)} of{" "}
-                    {filteredLessons.length} lessons
-                  </div>
-                  <div className="flex gap-2 flex-wrap justify-center">
-                    <button
-                      onClick={() => handlePageChange(page - 1)}
-                      disabled={page === 1}
-                      className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      Previous
-                    </button>
-                    <div className="flex gap-1">
-                      {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => {
-                        if (
-                          pageNum === 1 ||
-                          pageNum === totalPages ||
-                          (pageNum >= page - 1 && pageNum <= page + 1)
-                        ) {
-                          return (
-                            <button
-                              key={pageNum}
-                              onClick={() => handlePageChange(pageNum)}
-                              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                                pageNum === page
-                                  ? "bg-emerald-600 text-white"
-                                  : "text-gray-700 bg-white border border-gray-300 hover:bg-gray-50"
-                              }`}
-                            >
-                              {pageNum}
-                            </button>
-                          );
-                        } else if (pageNum === page - 2 || pageNum === page + 2) {
-                          return (
-                            <span key={pageNum} className="px-2 py-2 text-gray-700">
-                              ...
-                            </span>
-                          );
-                        }
-                        return null;
-                      })}
-                    </div>
-                    <button
-                      onClick={() => handlePageChange(page + 1)}
-                      disabled={page === totalPages}
-                      className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      Next
-                    </button>
-                  </div>
-                </div>
-              )}
             </>
           ) : (
             <div className="border border-dashed border-gray-300 rounded-lg p-8 text-center">

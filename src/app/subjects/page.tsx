@@ -520,7 +520,7 @@ export default function SubjectsLessonsPage() {
                                 Finish the current lesson to unlock this one.
                               </p>
                             </div>
-                          </div>
+                          </div> 
                         )}
                       </div>
 

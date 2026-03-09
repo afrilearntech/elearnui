@@ -648,7 +648,7 @@ export default function GamesPage() {
                       {games.map((game) => (
                       <div
                         key={game.id}
-                        className="bg-white rounded-2xl shadow-[0_4px_12px_rgba(0,0,0,0.08)] overflow-hidden hover:shadow-[0_8px_20px_rgba(0,0,0,0.12)] transition-all duration-300 cursor-pointer"
+                        className="bg-white rounded-2xl shadow-[0_4px_12px_rgba(0,0,0,0.08)] overflow-hidden hover:shadow-[0_8px_20px_rgba(0,0,0,0.12)] transition-all duration-300 cursor-pointer h-full flex flex-col"
                         onClick={() => handleGameClick(game)}
                       >
                         <div className="relative h-32 sm:h-36 lg:h-40 bg-linear-to-br from-gray-50 via-gray-100 to-gray-200 overflow-hidden">
@@ -668,20 +668,21 @@ export default function GamesPage() {
                             </div>
                           )}
                         </div>
-                        <div className="p-4 sm:p-5">
+                        <div className="p-4 sm:p-5 flex-1 flex flex-col">
                           <div className="flex items-start gap-3 mb-4">
                             <div className={`w-10 h-10 rounded-full ${game.iconBgColor} flex items-center justify-center shrink-0 mt-0.5`}>
                               <Icon icon={game.icon} className="text-gray-700" width={20} height={20} />
                             </div>
                             <div className="flex-1">
-                              <h3 className="text-[16px] sm:text-[18px] font-semibold text-[#111827] mb-1" style={{ fontFamily: 'Andika, sans-serif' }}>
+                              <h3 className="text-[16px] sm:text-[18px] font-semibold text-[#111827] mb-1 line-clamp-2 min-h-[48px]" style={{ fontFamily: 'Andika, sans-serif' }}>
                                 {game.title}
                               </h3>
-                              <p className="text-[12px] sm:text-[13px] text-[#6B7280]" style={{ fontFamily: 'Andika, sans-serif' }}>
+                              <p className="text-[12px] sm:text-[13px] text-[#6B7280] line-clamp-2 min-h-[40px]" style={{ fontFamily: 'Andika, sans-serif' }}>
                                 {game.description}
                               </p>
                             </div>
                       </div>
+                        <div className="mt-auto">
                         <button
                           type="button"
                             className={`w-full ${game.buttonColor} text-white text-[13px] sm:text-[14px] font-medium py-2.5 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors shadow-sm`}
@@ -694,6 +695,7 @@ export default function GamesPage() {
                             Play Now!
                             <Icon icon="mdi:play" width={16} height={16} />
                         </button>
+                        </div>
                         </div>
                       </div>
                       ))}

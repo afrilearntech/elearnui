@@ -104,7 +104,7 @@ export default function AssignmentDetailPage() {
   useEffect(() => {
     const fetchAssessment = async () => {
       if (!assignmentId) {
-        router.push('/assignments');
+        router.push('/assessments');
         return;
       }
 
@@ -123,7 +123,7 @@ export default function AssignmentDetailPage() {
         
         if (!foundAssessment) {
           showErrorToast('Assessment not found');
-          router.push('/assignments');
+          router.push('/assessments');
           return;
         }
         
@@ -131,7 +131,7 @@ export default function AssignmentDetailPage() {
         const locked = isAssessmentLocked(foundAssessment.id, data.assessments);
         if (locked) {
           showErrorToast('🔒 This quiz is locked! Complete the previous lesson quiz first.');
-          router.push('/assignments');
+          router.push('/assessments');
           return;
         }
         
@@ -170,7 +170,9 @@ export default function AssignmentDetailPage() {
               }, 500);
             }
           } else {
-            setShuffledQuestions([]);
+            showErrorToast('This assessment has no questions yet.');
+            router.push('/assessments');
+            return;
           }
         } catch (error) {
           console.error('Failed to load questions:', error);
@@ -185,7 +187,7 @@ export default function AssignmentDetailPage() {
           ? error.message
           : 'Failed to load assessment';
         showErrorToast(formatErrorMessage(errorMessage));
-        router.push('/assignments');
+        router.push('/assessments');
       } finally {
         setIsLoading(false);
       }
@@ -283,7 +285,7 @@ export default function AssignmentDetailPage() {
       
       showSuccessToast('🎉 Assessment submitted successfully! Great job! ⭐');
       setTimeout(() => {
-        router.push('/assignments');
+        router.push('/assessments');
       }, 2000);
     } catch (error) {
       const errorMessage = error instanceof ApiClientError
@@ -297,14 +299,6 @@ export default function AssignmentDetailPage() {
     }
   };
 
-
-  if (isLoading) {
-    return <StudentLoadingScreen title="Loading assignment details..." subtitle="Preparing questions and resources for you." />;
-  }
-
-  if (!assessment) {
-    return null;
-  }
 
   const currentQuestion = shuffledQuestions[currentQuestionIndex];
   const totalQuestions = shuffledQuestions.length;
@@ -391,6 +385,14 @@ export default function AssignmentDetailPage() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isEnabled, shuffledQuestions, currentQuestionIndex, answers, announce, playSound, handleSubmitAssessment]);
 
+  if (isLoading) {
+    return <StudentLoadingScreen title="Loading assignment details..." subtitle="Preparing questions and resources for you." />;
+  }
+
+  if (!assessment) {
+    return null;
+  }
+
   return (
     <div className="min-h-screen">
       <ElementaryNavbar onMenuToggle={() => setIsMobileMenuOpen(!isMobileMenuOpen)} />
@@ -407,14 +409,14 @@ export default function AssignmentDetailPage() {
             {/* Header */}
             <div className="sm:mx-8 mx-4 mb-6">
               <Link 
-                href="/assignments"
+                href="/assessments"
                 aria-label="Back to assessments page"
                 className="inline-flex items-center gap-2 text-[#3B82F6] hover:text-[#2563EB] mb-4 transition-colors"
                 style={{ fontFamily: 'Andika, sans-serif' }}
                 onClick={() => isEnabled && playSound('navigation')}
               >
                 <Icon icon="mdi:arrow-left" width={20} height={20} aria-hidden="true" />
-                <span className="text-sm font-medium">Back to Assignments</span>
+                <span className="text-sm font-medium">Back to Assessments</span>
               </Link>
               
               <div className="bg-white rounded-2xl shadow-lg p-6 border-2 border-[#E5E7EB]">
@@ -697,7 +699,7 @@ export default function AssignmentDetailPage() {
                       This assessment doesn't have any questions yet. Check back soon or ask your teacher about it!
                     </p>
                     <Link
-                      href="/assignments"
+                      href="/assessments"
                       className="px-6 py-3 bg-gradient-to-r from-[#9333EA] to-[#3B82F6] text-white rounded-xl font-semibold flex items-center gap-2 hover:shadow-lg transition-all"
                       style={{ fontFamily: 'Andika, sans-serif' }}
                     >

@@ -43,7 +43,7 @@ export default function Navbar({
   const navigationLinks = [
     { href: '/dashboard', label: 'Dashboard', key: 'dashboard' },
     { href: '/courses', label: 'Courses', key: 'courses' },
-    { href: '/assignments', label: 'Assignments', key: 'assignments' },
+    { href: '/assessments', label: 'Assessments', key: 'assignments' },
     { href: '/grades', label: 'Grades', key: 'grades' },
     { href: '/calendar', label: 'Calendar', key: 'calendar' },
     { href: '/resources', label: 'Resources', key: 'resources' }

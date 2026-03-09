@@ -691,7 +691,7 @@ export default function SubjectLessonDetail() {
                         </button>
                       )}
                       <button
-                        onClick={() => router.push('/assignments')}
+                        onClick={() => router.push('/assessments')}
                         className="flex-1 h-10 rounded-lg bg-linear-to-r from-[#FB923C] to-[#EF4444] text-white text-xs sm:text-sm flex items-center justify-center gap-2 hover:opacity-90 transition-opacity"
                         style={{ fontFamily: 'Andika, sans-serif' }}
                       >

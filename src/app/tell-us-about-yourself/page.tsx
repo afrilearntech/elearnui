@@ -217,7 +217,7 @@ export default function TellUsAboutYourself() {
       if (userRole === 'teacher') {
         showSuccessToast('🎉 Profile completed successfully! Your account is pending approval. Please login once your account is approved. Redirecting to login...', { duration: 6000 });
         setTimeout(() => {
-          router.push('/parent-teacher/sign-in');
+          router.push('/parent-teacher/sign-in/parent');
         }, 2000);
       } else {
       showSuccessToast('🎉 Profile completed successfully! Your account is pending approval. Please login once your account is approved. Redirecting to login...', { duration: 6000 });
@@ -244,7 +244,7 @@ export default function TellUsAboutYourself() {
           showErrorToast('Your account is pending approval. Please login once your account is approved. Redirecting to login...', { duration: 6000 });
           setTimeout(() => {
             if (userRole === 'teacher') {
-              router.push('/parent-teacher/sign-in');
+              router.push('/parent-teacher/sign-in/parent');
             } else {
             router.push('/login');
             }
