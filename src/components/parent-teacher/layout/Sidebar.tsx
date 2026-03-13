@@ -35,9 +35,15 @@ const teacherNavItems: NavItem[] = [
 ];
 
 function isActivePath(pathname: string, href: string) {
-  if (href === "/parent-teacher/dashboard") return pathname === "/parent-teacher/dashboard" || pathname === "/parent-teacher";
-  if (href === "/dashboard/teacher") return pathname === "/parent-teacher/dashboard/teacher";
-  return pathname.startsWith(href);
+  if (href === "/parent-teacher/dashboard") {
+    return pathname === "/parent-teacher/dashboard" || pathname === "/parent-teacher";
+  }
+
+  if (href === "/parent-teacher/dashboard/teacher") {
+    return pathname === "/parent-teacher/dashboard/teacher";
+  }
+
+  return pathname === href || pathname.startsWith(`${href}/`);
 }
 
 type SidebarProps = {

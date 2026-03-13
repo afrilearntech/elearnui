@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Icon } from '@iconify/react';
 import ElementaryNavbar from '@/components/elementary/ElementaryNavbar';
@@ -10,6 +10,7 @@ import { changePassword, ChangePasswordRequest } from '@/lib/api/auth';
 import { showErrorToast, showSuccessToast, formatErrorMessage } from '@/lib/toast';
 import { ApiClientError } from '@/lib/api/client';
 import Spinner from '@/components/ui/Spinner';
+import { useAccessibility } from '@/contexts/AccessibilityContext';
 
 const formatDate = (dateString: string | null) => {
   if (!dateString) return "N/A";
@@ -34,6 +35,7 @@ const formatDateTime = (dateString: string) => {
 
 export default function ElementaryProfilePage() {
   const router = useRouter();
+  const { isEnabled, announce } = useAccessibility();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -45,6 +47,18 @@ export default function ElementaryProfilePage() {
   });
   const [passwordErrors, setPasswordErrors] = useState<Record<string, string>>({});
   const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const hasAnnouncedPageRef = useRef(false);
+  const currentPasswordInputRef = useRef<HTMLInputElement | null>(null);
+
+  const resetPasswordForm = () => {
+    setShowPasswordForm(false);
+    setPasswordData({
+      current_password: "",
+      new_password: "",
+      confirm_password: "",
+    });
+    setPasswordErrors({});
+  };
 
   useEffect(() => {
     const token = localStorage.getItem('auth_token');
@@ -64,6 +78,50 @@ export default function ElementaryProfilePage() {
     }
     setIsLoading(false);
   }, [router]);
+
+  useEffect(() => {
+    if (!isEnabled || isLoading || !user || hasAnnouncedPageRef.current) return;
+    announce(
+      `Profile page loaded for ${user.name || 'student'}. Review your details, then open Change Password to update your password.`,
+      'polite'
+    );
+    hasAnnouncedPageRef.current = true;
+  }, [isEnabled, isLoading, user, announce]);
+
+  useEffect(() => {
+    if (!showPasswordForm) return;
+    const focusTimer = setTimeout(() => {
+      currentPasswordInputRef.current?.focus();
+    }, 120);
+    if (isEnabled) {
+      announce('Change password form opened. Start with your current password.', 'polite');
+    }
+    return () => clearTimeout(focusTimer);
+  }, [showPasswordForm, isEnabled, announce]);
+
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea') return;
+
+      if (isMobileMenuOpen) {
+        setIsMobileMenuOpen(false);
+        return;
+      }
+
+      if (showPasswordForm) {
+        resetPasswordForm();
+        if (isEnabled) {
+          announce('Change password form closed.', 'polite');
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [isMobileMenuOpen, showPasswordForm, isEnabled, announce]);
 
   const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -97,6 +155,10 @@ export default function ElementaryProfilePage() {
     }
 
     setPasswordErrors(newErrors);
+    if (Object.keys(newErrors).length > 0 && isEnabled) {
+      const firstError = Object.values(newErrors)[0];
+      announce(`Password form error. ${firstError}`, 'assertive');
+    }
     return Object.keys(newErrors).length === 0;
   };
 
@@ -120,13 +182,10 @@ export default function ElementaryProfilePage() {
       }, token);
 
       showSuccessToast("Password changed successfully!");
-      setPasswordData({
-        current_password: "",
-        new_password: "",
-        confirm_password: "",
-      });
-      setShowPasswordForm(false);
-      setPasswordErrors({});
+      if (isEnabled) {
+        announce('Password changed successfully.', 'polite');
+      }
+      resetPasswordForm();
     } catch (error) {
       console.error("Error changing password:", error);
       if (error instanceof ApiClientError) {
@@ -167,6 +226,7 @@ export default function ElementaryProfilePage() {
           </p>
           <button
             onClick={() => router.push('/login')}
+            aria-label="Go to login page"
             className="px-6 py-2 bg-[#059669] text-white rounded-lg hover:bg-[#047857] transition-colors"
             style={{ fontFamily: 'Andika, sans-serif' }}
           >
@@ -188,7 +248,7 @@ export default function ElementaryProfilePage() {
           onMobileMenuClose={handleMenuClose}
         />
         
-        <main className="flex-1 bg-linear-to-br from-[#DBEAFE] via-[#F0FDF4] to-[#CFFAFE] sm:pl-[280px] lg:pl-[320px] overflow-x-hidden">
+        <main id="main-content" role="main" className="flex-1 bg-linear-to-br from-[#DBEAFE] via-[#F0FDF4] to-[#CFFAFE] sm:pl-[280px] lg:pl-[320px] overflow-x-hidden">
           <div className="p-4 lg:p-8 max-w-full">
             {/* Page Header */}
             <div className="bg-white/60 rounded-2xl shadow-lg p-6 sm:p-8 mt-8 sm:mx-8 mx-4 mb-6">
@@ -310,16 +370,18 @@ export default function ElementaryProfilePage() {
                       </h3>
                       <button
                         onClick={() => {
-                          setShowPasswordForm(!showPasswordForm);
                           if (showPasswordForm) {
-                            setPasswordData({
-                              current_password: "",
-                              new_password: "",
-                              confirm_password: "",
-                            });
-                            setPasswordErrors({});
+                            resetPasswordForm();
+                            if (isEnabled) {
+                              announce('Change password form closed.', 'polite');
+                            }
+                          } else {
+                            setShowPasswordForm(true);
                           }
                         }}
+                        aria-expanded={showPasswordForm}
+                        aria-controls="change-password-form"
+                        aria-label={showPasswordForm ? 'Close change password form' : 'Open change password form'}
                         className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-linear-to-r from-[#3AB0FF] to-[#00D68F] rounded-lg hover:opacity-90 transition-all duration-200"
                         style={{ fontFamily: 'Andika, sans-serif' }}
                       >
@@ -329,16 +391,20 @@ export default function ElementaryProfilePage() {
                     </div>
 
                     {showPasswordForm && (
-                      <form onSubmit={handlePasswordSubmit} className="bg-gray-50 rounded-xl p-6 border border-gray-200 space-y-4">
+                      <form id="change-password-form" onSubmit={handlePasswordSubmit} className="bg-gray-50 rounded-xl p-6 border border-gray-200 space-y-4" aria-label="Change password form">
                         <div>
-                          <label className="block text-sm font-medium text-gray-800 mb-2" style={{ fontFamily: 'Andika, sans-serif' }}>
+                          <label htmlFor="current_password" className="block text-sm font-medium text-gray-800 mb-2" style={{ fontFamily: 'Andika, sans-serif' }}>
                             Current Password <span className="text-red-600">*</span>
                           </label>
                           <input
+                            id="current_password"
+                            ref={currentPasswordInputRef}
                             type="password"
                             name="current_password"
                             value={passwordData.current_password}
                             onChange={handlePasswordChange}
+                            aria-invalid={Boolean(passwordErrors.current_password)}
+                            aria-describedby={passwordErrors.current_password ? 'current_password_error' : undefined}
                             className={`w-full h-12 rounded-lg border px-4 text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-[#3AB0FF] ${
                               passwordErrors.current_password ? "border-red-500" : "border-gray-300"
                             }`}
@@ -346,21 +412,24 @@ export default function ElementaryProfilePage() {
                             style={{ fontFamily: 'Andika, sans-serif' }}
                           />
                           {passwordErrors.current_password && (
-                            <p className="mt-1 text-sm text-red-600" style={{ fontFamily: 'Andika, sans-serif' }}>
+                            <p id="current_password_error" className="mt-1 text-sm text-red-600" style={{ fontFamily: 'Andika, sans-serif' }}>
                               {passwordErrors.current_password}
                             </p>
                           )}
                         </div>
 
                         <div>
-                          <label className="block text-sm font-medium text-gray-800 mb-2" style={{ fontFamily: 'Andika, sans-serif' }}>
+                          <label htmlFor="new_password" className="block text-sm font-medium text-gray-800 mb-2" style={{ fontFamily: 'Andika, sans-serif' }}>
                             New Password <span className="text-red-600">*</span>
                           </label>
                           <input
+                            id="new_password"
                             type="password"
                             name="new_password"
                             value={passwordData.new_password}
                             onChange={handlePasswordChange}
+                            aria-invalid={Boolean(passwordErrors.new_password)}
+                            aria-describedby={passwordErrors.new_password ? 'new_password_error' : undefined}
                             className={`w-full h-12 rounded-lg border px-4 text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-[#3AB0FF] ${
                               passwordErrors.new_password ? "border-red-500" : "border-gray-300"
                             }`}
@@ -368,21 +437,24 @@ export default function ElementaryProfilePage() {
                             style={{ fontFamily: 'Andika, sans-serif' }}
                           />
                           {passwordErrors.new_password && (
-                            <p className="mt-1 text-sm text-red-600" style={{ fontFamily: 'Andika, sans-serif' }}>
+                            <p id="new_password_error" className="mt-1 text-sm text-red-600" style={{ fontFamily: 'Andika, sans-serif' }}>
                               {passwordErrors.new_password}
                             </p>
                           )}
                         </div>
 
                         <div>
-                          <label className="block text-sm font-medium text-gray-800 mb-2" style={{ fontFamily: 'Andika, sans-serif' }}>
+                          <label htmlFor="confirm_password" className="block text-sm font-medium text-gray-800 mb-2" style={{ fontFamily: 'Andika, sans-serif' }}>
                             Confirm New Password <span className="text-red-600">*</span>
                           </label>
                           <input
+                            id="confirm_password"
                             type="password"
                             name="confirm_password"
                             value={passwordData.confirm_password}
                             onChange={handlePasswordChange}
+                            aria-invalid={Boolean(passwordErrors.confirm_password)}
+                            aria-describedby={passwordErrors.confirm_password ? 'confirm_password_error' : undefined}
                             className={`w-full h-12 rounded-lg border px-4 text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-[#3AB0FF] ${
                               passwordErrors.confirm_password ? "border-red-500" : "border-gray-300"
                             }`}
@@ -390,7 +462,7 @@ export default function ElementaryProfilePage() {
                             style={{ fontFamily: 'Andika, sans-serif' }}
                           />
                           {passwordErrors.confirm_password && (
-                            <p className="mt-1 text-sm text-red-600" style={{ fontFamily: 'Andika, sans-serif' }}>
+                            <p id="confirm_password_error" className="mt-1 text-sm text-red-600" style={{ fontFamily: 'Andika, sans-serif' }}>
                               {passwordErrors.confirm_password}
                             </p>
                           )}
@@ -399,15 +471,8 @@ export default function ElementaryProfilePage() {
                         <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-4">
                           <button
                             type="button"
-                            onClick={() => {
-                              setShowPasswordForm(false);
-                              setPasswordData({
-                                current_password: "",
-                                new_password: "",
-                                confirm_password: "",
-                              });
-                              setPasswordErrors({});
-                            }}
+                            onClick={resetPasswordForm}
+                            aria-label="Cancel password update"
                             className="w-full sm:w-auto px-6 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                             style={{ fontFamily: 'Andika, sans-serif' }}
                           >
@@ -416,6 +481,7 @@ export default function ElementaryProfilePage() {
                           <button
                             type="submit"
                             disabled={isChangingPassword}
+                            aria-label={isChangingPassword ? 'Changing password' : 'Submit password change'}
                             className="w-full sm:w-auto px-6 py-2.5 text-sm font-medium text-white bg-linear-to-r from-[#3AB0FF] to-[#00D68F] rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2"
                             style={{ fontFamily: 'Andika, sans-serif' }}
                           >

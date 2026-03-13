@@ -13,6 +13,8 @@ import { ApiClientError } from '@/lib/api/client';
 import { showErrorToast, formatErrorMessage } from '@/lib/toast';
 import Spinner from '@/components/ui/Spinner';
 import StudentLoadingScreen from '@/components/ui/StudentLoadingScreen';
+import { useAccessibility } from '@/contexts/AccessibilityContext';
+import { usePageAccessibility } from '@/hooks/usePageAccessibility';
 
 interface GameCard {
   id: string;
@@ -99,6 +101,7 @@ const mapGameToCard = (game: Game): GameCard => {
 
 export default function GamesPage() {
   const router = useRouter();
+  const { isEnabled, announce, playSound } = useAccessibility();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const handleMenuToggle = () => setIsMobileMenuOpen(!isMobileMenuOpen);
   const handleMenuClose = () => setIsMobileMenuOpen(false);
@@ -128,6 +131,24 @@ export default function GamesPage() {
   const audioCtxRef = useRef<AudioContext | null>(null);
   const [activeTouchLetter, setActiveTouchLetter] = useState<{ letter: string; from: 'pool' | number } | null>(null);
   const [touchTargetSlot, setTouchTargetSlot] = useState<number | null>(null);
+
+  const accessibilityProgressPercent = answerKey.length
+    ? Math.round((slots.filter(Boolean).length / answerKey.length) * 100)
+    : 0;
+
+  const accessibilitySummary = !showGame
+    ? `${games.length} games available. Select a game card and activate Play Now.`
+    : !showGamePlay
+    ? `Game preview opened for ${selectedGame?.title || 'selected game'}. Activate Start Game or open How to Play.`
+    : `Game play active. Progress ${accessibilityProgressPercent} percent. Use Clear, Check Word, and Hint buttons.`;
+
+  usePageAccessibility({
+    pageTitle: 'Fun and Games',
+    pageDescription: accessibilitySummary,
+    actions: ['Open game', 'Start game', 'Check word', 'Use hint', 'Back to list'],
+    autoRead: true,
+    delay: 700,
+  });
 
   const playDragSound = () => {
     if (typeof window === 'undefined') return;
@@ -229,6 +250,32 @@ export default function GamesPage() {
       }
     }
   }, [slots, answerKey, showGamePlay, hasChecked]);
+
+  useEffect(() => {
+    if (!isEnabled) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (showCongratulationsModal) {
+        setShowCongratulationsModal(false);
+        announce('Closed congratulations dialog.', 'polite');
+        playSound('navigation');
+        return;
+      }
+      if (showDescriptionModal) {
+        setShowDescriptionModal(false);
+        announce('Closed how to play dialog.', 'polite');
+        playSound('navigation');
+        return;
+      }
+      if (showGame) {
+        handleBackToList();
+        announce('Returned to games list.', 'polite');
+        playSound('navigation');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isEnabled, showDescriptionModal, showCongratulationsModal, showGame, announce, playSound]);
 
   const handleGameClick = (game: GameCard) => {
     const gameIndex = games.findIndex((g) => g.id === game.id);
@@ -630,7 +677,7 @@ export default function GamesPage() {
       <div className="flex">
         <ElementarySidebar activeItem="games" isMobileMenuOpen={isMobileMenuOpen} onMobileMenuClose={handleMenuClose} />
 
-        <main className="flex-1 bg-linear-to-br from-[#DBEAFE] via-[#F0FDF4] to-[#CFFAFE] sm:pl-[280px] lg:pl-[320px]">
+        <main id="main-content" role="main" className="flex-1 bg-linear-to-br from-[#DBEAFE] via-[#F0FDF4] to-[#CFFAFE] sm:pl-[280px] lg:pl-[320px]">
           <div className="p-4 lg:p-8">
             {/* Heading */}
             <div className="bg-white/60 rounded-xl shadow-md px-4 sm:px-6 py-4 sm:py-5 sm:ml-8 sm:mr-8" style={{ fontFamily: 'Andika, sans-serif' }}>
@@ -646,10 +693,19 @@ export default function GamesPage() {
                   games.length > 0 ? (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 lg:gap-6">
                       {games.map((game) => (
-                      <div
+                      <article
                         key={game.id}
                         className="bg-white rounded-2xl shadow-[0_4px_12px_rgba(0,0,0,0.08)] overflow-hidden hover:shadow-[0_8px_20px_rgba(0,0,0,0.12)] transition-all duration-300 cursor-pointer h-full flex flex-col"
                         onClick={() => handleGameClick(game)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            handleGameClick(game);
+                          }
+                        }}
+                        tabIndex={0}
+                        role="button"
+                        aria-label={`${game.title}. ${game.description}. Press Enter to open.`}
                       >
                         <div className="relative h-32 sm:h-36 lg:h-40 bg-linear-to-br from-gray-50 via-gray-100 to-gray-200 overflow-hidden">
                           {game.image ? (
@@ -697,7 +753,7 @@ export default function GamesPage() {
                         </button>
                         </div>
                         </div>
-                      </div>
+                      </article>
                       ))}
                     </div>
                   ) : (
@@ -721,6 +777,7 @@ export default function GamesPage() {
                           type="button"
                           onClick={handleStartGame}
                           disabled={isGameDataLoading}
+                          aria-label={isGameDataLoading ? 'Loading game details' : `Start ${selectedGame?.title || 'game'}`}
                           className="h-12 px-6 rounded-full text-white flex items-center gap-2 shadow-md cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                           style={{ background: 'linear-gradient(90deg, #10B981, #3B82F6)' }}
                         >
@@ -741,6 +798,7 @@ export default function GamesPage() {
                           className="h-12 px-6 rounded-full text-white flex items-center gap-2 shadow-md cursor-pointer"
                           style={{ background: 'linear-gradient(90deg, #FDBA74, #F97316)' }}
                           onClick={() => setShowDescriptionModal(true)}
+                          aria-label="Open how to play instructions"
                         >
                           <Icon icon="mdi:help-circle" width={20} height={20} />
                           How to Play
@@ -1005,10 +1063,16 @@ export default function GamesPage() {
         </main>
       </div>
       {showDescriptionModal && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center px-4">
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-lg" style={{ fontFamily: 'Andika, sans-serif' }}>
+        <div
+          className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center px-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="game-how-to-play-title"
+          onClick={() => setShowDescriptionModal(false)}
+        >
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-lg" style={{ fontFamily: 'Andika, sans-serif' }} onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-[#111827] flex items-center gap-2">
+              <h3 id="game-how-to-play-title" className="text-lg font-semibold text-[#111827] flex items-center gap-2">
                 <Icon icon="mdi:help-circle" className="text-[#3B82F6]" width={24} height={24} />
                 How to Play
               </h3>
@@ -1016,6 +1080,7 @@ export default function GamesPage() {
                 type="button"
                 className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 hover:bg-gray-200 transition-colors"
                 onClick={() => setShowDescriptionModal(false)}
+                aria-label="Close how to play dialog"
               >
                 <Icon icon="mdi:close" />
               </button>
@@ -1092,11 +1157,17 @@ export default function GamesPage() {
         </div>
       )}
       {showCongratulationsModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center px-4" style={{ fontFamily: 'Andika, sans-serif' }}>
+        <div
+          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center px-4"
+          style={{ fontFamily: 'Andika, sans-serif' }}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="game-congrats-title"
+        >
           <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl transform transition-all">
             <div className="text-center">
               <div className="text-6xl mb-4 animate-bounce">🎉</div>
-              <h2 className="text-3xl font-bold bg-linear-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text text-transparent mb-2">
+              <h2 id="game-congrats-title" className="text-3xl font-bold bg-linear-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text text-transparent mb-2">
                 Amazing Job!
               </h2>
               <p className="text-lg text-gray-700 mb-1">You completed the game!</p>

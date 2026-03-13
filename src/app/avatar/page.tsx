@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import ElementaryNavbar from '@/components/elementary/ElementaryNavbar';
 import ElementarySidebar from '@/components/elementary/ElementarySidebar';
 import { Icon } from '@iconify/react';
-import Image from 'next/image';
+import { useAccessibility } from '@/contexts/AccessibilityContext';
 
 interface AvatarParts {
   hair: string;
@@ -60,6 +60,7 @@ const accessoryOptions = [
 
 export default function AvatarPage() {
   const router = useRouter();
+  const { isEnabled, announce } = useAccessibility();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState<keyof AvatarParts>('hair');
   const [avatar, setAvatar] = useState<AvatarParts>({
@@ -70,16 +71,51 @@ export default function AvatarPage() {
     accessory: 'none',
   });
   const [isSaving, setIsSaving] = useState(false);
+  const hasAnnouncedPageRef = useRef(false);
 
   useEffect(() => {
     const savedAvatar = localStorage.getItem('kid_avatar');
     if (savedAvatar) {
       try {
-        setAvatar(JSON.parse(savedAvatar));
+        const parsed = JSON.parse(savedAvatar) as Partial<AvatarParts>;
+        if (
+          parsed &&
+          typeof parsed.hair === 'string' &&
+          typeof parsed.eyes === 'string' &&
+          typeof parsed.skin === 'string' &&
+          typeof parsed.clothes === 'string' &&
+          typeof parsed.accessory === 'string'
+        ) {
+          setAvatar(parsed as AvatarParts);
+        }
       } catch (e) {
+        localStorage.removeItem('kid_avatar');
       }
     }
   }, []);
+
+  useEffect(() => {
+    if (!isEnabled || hasAnnouncedPageRef.current) return;
+    const selectedCategoryName = categories.find((c) => c.id === activeCategory)?.name || 'Hair';
+    announce(
+      `Avatar room loaded. Customize hair, eyes, skin, clothes, and accessories. ` +
+      `${selectedCategoryName} category selected. Choose an option, then save your avatar.`,
+      'polite'
+    );
+    hasAnnouncedPageRef.current = true;
+  }, [isEnabled, activeCategory, announce]);
+
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (isMobileMenuOpen) {
+        setIsMobileMenuOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [isMobileMenuOpen]);
 
   const handleMenuToggle = () => setIsMobileMenuOpen(!isMobileMenuOpen);
   const handleMenuClose = () => setIsMobileMenuOpen(false);
@@ -90,10 +126,16 @@ export default function AvatarPage() {
 
   const handleSave = () => {
     setIsSaving(true);
-    localStorage.setItem('kid_avatar', JSON.stringify(avatar));
-    setTimeout(() => {
-      setIsSaving(false);
-    }, 500);
+    try {
+      localStorage.setItem('kid_avatar', JSON.stringify(avatar));
+      if (isEnabled) announce('Avatar saved successfully.', 'polite');
+    } catch {
+      if (isEnabled) announce('Could not save avatar. Please try again.', 'assertive');
+    } finally {
+      setTimeout(() => {
+        setIsSaving(false);
+      }, 500);
+    }
   };
 
   const getCurrentOption = (category: keyof AvatarParts) => {
@@ -108,7 +150,6 @@ export default function AvatarPage() {
 
   const renderAvatarPreview = () => {
     const hair = hairOptions.find(h => h.id === avatar.hair);
-    const eyes = eyesOptions.find(e => e.id === avatar.eyes);
     const skin = skinOptions.find(s => s.id === avatar.skin);
     const clothes = clothesOptions.find(c => c.id === avatar.clothes);
     const accessory = accessoryOptions.find(a => a.id === avatar.accessory);
@@ -116,7 +157,11 @@ export default function AvatarPage() {
     return (
       <div className="relative w-full max-w-xs mx-auto">
         <div className="bg-linear-to-br from-purple-100 via-pink-100 to-blue-100 rounded-3xl p-8 shadow-2xl border-4 border-white">
-          <div className="bg-white rounded-full w-48 h-48 mx-auto flex items-center justify-center relative overflow-hidden shadow-lg">
+          <div
+            className="bg-white rounded-full w-48 h-48 mx-auto flex items-center justify-center relative overflow-hidden shadow-lg"
+            role="img"
+            aria-label={`Avatar preview. Hair ${hair?.name || 'default'}, eyes ${getCurrentOption('eyes')?.name || 'default'}, skin ${skin?.name || 'default'}, clothes ${clothes?.name || 'default'}, accessory ${accessory?.name || 'none'}.`}
+          >
             <div className="text-8xl relative z-10">
               {hair?.emoji || '👤'}
             </div>
@@ -146,11 +191,18 @@ export default function AvatarPage() {
     else if (activeCategory === 'accessory') options = accessoryOptions;
 
     return (
-      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3 mt-4">
+      <div
+        className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3 mt-4"
+        role="radiogroup"
+        aria-label={`${categories.find(c => c.id === activeCategory)?.name || activeCategory} options`}
+      >
         {options.map((option) => (
           <button
             key={option.id}
             onClick={() => handlePartChange(activeCategory, option.id)}
+            role="radio"
+            aria-checked={avatar[activeCategory] === option.id}
+            aria-label={`${option.name}${avatar[activeCategory] === option.id ? ', selected' : ''}`}
             className={`p-4 rounded-2xl border-4 transition-all duration-200 transform hover:scale-105 ${
               avatar[activeCategory] === option.id
                 ? 'border-purple-500 bg-purple-100 shadow-lg scale-105'
@@ -186,7 +238,7 @@ export default function AvatarPage() {
           onMobileMenuClose={handleMenuClose} 
         />
         
-        <main className="flex-1 sm:pl-[280px] lg:pl-[320px] overflow-x-hidden">
+        <main id="main-content" role="main" className="flex-1 sm:pl-[280px] lg:pl-[320px] overflow-x-hidden">
           <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
             <div className="mb-6">
               <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-2 bg-linear-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text text-transparent" style={{ fontFamily: 'Andika, sans-serif' }}>
@@ -207,6 +259,7 @@ export default function AvatarPage() {
                 <button
                   onClick={handleSave}
                   disabled={isSaving}
+                  aria-label={isSaving ? 'Saving avatar' : 'Save avatar'}
                   className="w-full mt-6 bg-linear-to-r from-purple-500 to-pink-500 text-white font-bold py-3 px-6 rounded-2xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50"
                   style={{ fontFamily: 'Andika, sans-serif' }}
                 >
@@ -230,11 +283,20 @@ export default function AvatarPage() {
                   Customize
                 </h2>
                 
-                <div className="flex flex-wrap gap-2 mb-4">
+                <div className="flex flex-wrap gap-2 mb-4" role="tablist" aria-label="Avatar categories">
                   {categories.map((cat) => (
                     <button
                       key={cat.id}
-                      onClick={() => setActiveCategory(cat.id)}
+                      onClick={() => {
+                        setActiveCategory(cat.id);
+                        if (isEnabled) {
+                          announce(`${cat.name} category selected.`, 'polite');
+                        }
+                      }}
+                      role="tab"
+                      aria-selected={activeCategory === cat.id}
+                      aria-controls="avatar-options-panel"
+                      aria-label={`${cat.name} category${activeCategory === cat.id ? ', selected' : ''}`}
                       className={`px-4 py-2 rounded-xl font-medium text-sm transition-all duration-200 flex items-center gap-2 ${
                         activeCategory === cat.id
                           ? `${cat.color} ${cat.textColor} shadow-md scale-105`
@@ -257,7 +319,9 @@ export default function AvatarPage() {
                   </div>
                 </div>
 
-                {renderOptions()}
+                <div id="avatar-options-panel" role="tabpanel" aria-label={`${categories.find(c => c.id === activeCategory)?.name || activeCategory} options panel`}>
+                  {renderOptions()}
+                </div>
               </div>
             </div>
 

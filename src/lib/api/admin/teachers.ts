@@ -1,4 +1,5 @@
 import { apiRequest, ApiClientError } from "../client";
+import { normalizeAdminListResponse } from "./normalize";
 
 export interface TeacherProfile {
   id: number;
@@ -35,7 +36,8 @@ export interface TeacherRecord {
 }
 
 export async function getTeachers(): Promise<TeacherRecord[]> {
-  return apiRequest<TeacherRecord[]>("/content/teachers/");
+  const response = await apiRequest<unknown>("/content/teachers/");
+  return normalizeAdminListResponse<TeacherRecord>(response, ["teachers"]);
 }
 
 export interface CreateTeacherRequest {

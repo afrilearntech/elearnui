@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import ElementaryNavbar from '@/components/elementary/ElementaryNavbar';
 import ElementarySidebar from '@/components/elementary/ElementarySidebar';
@@ -13,13 +13,34 @@ import StudentLoadingScreen from '@/components/ui/StudentLoadingScreen';
 import { getElementaryDashboard } from '@/lib/api/dashboard';
 import { ApiClientError } from '@/lib/api/client';
 import { showErrorToast, formatErrorMessage } from '@/lib/toast';
+import { useAccessibility } from '@/contexts/AccessibilityContext';
 
 export default function ElementaryDashboard() {
   const router = useRouter();
+  const { isEnabled, announce } = useAccessibility();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [user, setUser] = useState<any>(null);
+  const hasAnnouncedPageRef = useRef(false);
+
+  const safeName = user?.name || 'Student';
+  const lessonCount = dashboardData?.lessons_completed || 0;
+  const points = dashboardData?.points_earned || 0;
+  const streak = dashboardData?.streaks_this_week || 0;
+  const level = dashboardData?.current_level || 'Grade 1';
+  const continueLearningCount = dashboardData?.continue_learning?.length || 0;
+  const activitiesCount = dashboardData?.recent_activities?.length || 0;
+
+  useEffect(() => {
+    if (!isEnabled || isLoading || hasAnnouncedPageRef.current) return;
+    hasAnnouncedPageRef.current = true;
+    announce(
+      `Elementary dashboard loaded. Welcome ${safeName}. Lessons completed ${lessonCount}, stars earned ${points}, streak ${streak}, level ${level}. ` +
+      `To navigate sidebar, press Tab to move link by link and Enter to open a page.`,
+      'polite'
+    );
+  }, [isEnabled, isLoading, safeName, lessonCount, points, streak, level, announce]);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -80,10 +101,10 @@ export default function ElementaryDashboard() {
           onMobileMenuClose={handleMenuClose}
         />
         
-        <main className="flex-1 bg-linear-to-br from-[#DBEAFE] via-[#F0FDF4] to-[#CFFAFE] sm:pl-[280px] lg:pl-[320px] overflow-x-hidden">
+        <main id="main-content" role="main" className="flex-1 bg-linear-to-br from-[#DBEAFE] via-[#F0FDF4] to-[#CFFAFE] sm:pl-[280px] lg:pl-[320px] overflow-x-hidden">
           <div className="p-4 lg:p-8 max-w-full">
             {/* Welcome Banner */}
-            <div className="bg-white/60 rounded-2xl shadow-lg h-[140px] mt-8 sm:mx-8 mx-4 w-full max-w-full overflow-hidden">
+            <div className="bg-white/60 rounded-2xl shadow-lg h-[140px] mt-8 sm:mx-8 mx-4 w-full max-w-full overflow-hidden" role="region" aria-label={`Welcome section. Welcome back, ${safeName}. Ready for another magical learning adventure.`}>
               <div className="h-full flex flex-col justify-center px-6 sm:px-8">
                 <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-800 mb-2 truncate" style={{ fontFamily: 'Andika, sans-serif' }}>
                   Welcome back, {user?.name || 'Student'}! ✨
@@ -95,7 +116,7 @@ export default function ElementaryDashboard() {
             </div>
 
             {/* Progress/Stats Section */}
-            <div className="sm:mx-8 mx-4">
+            <div className="sm:mx-8 mx-4" role="region" aria-label={`Progress stats section. Lessons completed ${lessonCount}, stars earned ${points}, day streak ${streak}, current level ${level}.`}>
               <ElementaryStatsCards 
                 stats={dashboardData ? [
                   {
@@ -138,7 +159,7 @@ export default function ElementaryDashboard() {
               />
             </div>
 
-            <div className="flex flex-col lg:flex-row lg:gap-[24px] mt-8 sm:mx-8 mx-4 w-full max-w-full">
+            <div className="flex flex-col lg:flex-row lg:gap-[24px] mt-8 sm:mx-8 mx-4 w-full max-w-full" role="region" aria-label={`Learning actions section. ${continueLearningCount} continue learning module${continueLearningCount === 1 ? '' : 's'} available and today's magic challenges.`}>
               {/* Continue Learning Section */}
               <ContinueLearningSection 
                 modules={dashboardData?.continue_learning && dashboardData.continue_learning.length > 0
@@ -158,12 +179,12 @@ export default function ElementaryDashboard() {
             </div>
 
             {/* Explore Magical Subjects */}
-            <div className="sm:mx-8 mx-4">
-            <ExploreSubjectsSection />
+            <div className="sm:mx-8 mx-4" role="region" aria-label="Explore subjects section. Discover magical subjects and open one to start learning.">
+              <ExploreSubjectsSection />
             </div>
 
             {/* Recent Activities */}
-            <div className="sm:mx-8 mx-4">
+            <div className="sm:mx-8 mx-4" role="region" aria-label={`Recent adventures section. ${activitiesCount} recent activit${activitiesCount === 1 ? 'y' : 'ies'} available.`}>
               <RecentAdventuresSection 
                 activities={dashboardData?.recent_activities || []}
               />

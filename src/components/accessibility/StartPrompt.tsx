@@ -8,6 +8,13 @@ export default function StartPrompt() {
   const [hasInteracted, setHasInteracted] = useState(false);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    // Do not re-run onboarding speech for users who already enabled/dismissed.
+    const promptDismissed = localStorage.getItem('accessibility_prompt_dismissed') === 'true';
+    if (isEnabled || promptDismissed) {
+      return;
+    }
+
     const hasInteractedBefore = sessionStorage.getItem('has_interacted');
 
     if (!hasInteractedBefore) {
@@ -57,7 +64,7 @@ export default function StartPrompt() {
         document.removeEventListener('touchstart', triggerWelcome);
       };
     }
-  }, [speakWelcomeMessage, hasInteracted]);
+  }, [speakWelcomeMessage, hasInteracted, isEnabled]);
 
   return null;
 }

@@ -1,5 +1,33 @@
 import { apiRequest } from './client';
 
+function normalizeLessonsListResponse(payload: unknown): LessonListItem[] {
+  if (Array.isArray(payload)) {
+    return payload as LessonListItem[];
+  }
+
+  if (!payload || typeof payload !== 'object') {
+    return [];
+  }
+
+  const obj = payload as Record<string, unknown>;
+  const listKeys = ['results', 'data', 'items', 'lessons'];
+
+  for (const key of listKeys) {
+    const value = obj[key];
+    if (Array.isArray(value)) {
+      return value as LessonListItem[];
+    }
+  }
+
+  for (const value of Object.values(obj)) {
+    if (Array.isArray(value)) {
+      return value as LessonListItem[];
+    }
+  }
+
+  return [];
+}
+
 export interface LessonDetail {
   id: number;
   subject: number;
@@ -72,11 +100,12 @@ export interface LessonListItem {
 }
 
 export async function getAllLessons(token: string): Promise<LessonListItem[]> {
-  return apiRequest<LessonListItem[]>('/lessons/', {
+  const response = await apiRequest<unknown>('/lessons/', {
     method: 'GET',
     headers: {
       'Authorization': `Token ${token}`,
     },
   });
+  return normalizeLessonsListResponse(response);
 }
 

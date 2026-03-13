@@ -40,8 +40,8 @@ export interface DashboardData {
   high_learners: HighLearner[];
 }
 
-export async function getDashboardData(): Promise<DashboardData[]> {
-  return apiRequest<DashboardData[]>("/admin/dashboard/", {
+export async function getDashboardData(): Promise<DashboardData | DashboardData[]> {
+  return apiRequest<DashboardData | DashboardData[]>("/admin/dashboard/", {
     method: "GET",
   });
 }

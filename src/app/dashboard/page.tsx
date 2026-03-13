@@ -1,14 +1,20 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Icon } from '@iconify/react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
+import StudentLoadingScreen from '@/components/ui/StudentLoadingScreen';
+import { useAccessibility } from '@/contexts/AccessibilityContext';
 
 export default function Dashboard() {
   const router = useRouter();
+  const { isEnabled, announce } = useAccessibility();
   const [user, setUser] = useState<any>(null);
+  const [isCheckingAccess, setIsCheckingAccess] = useState(true);
+  const hasAnnouncedRef = useRef(false);
 
   useEffect(() => {
     const token = localStorage.getItem('auth_token');
@@ -25,25 +31,39 @@ export default function Dashboard() {
         console.error('Error parsing user data:', e);
       }
     }
+
+    setIsCheckingAccess(false);
   }, [router]);
+
+  useEffect(() => {
+    if (!isEnabled || isCheckingAccess || hasAnnouncedRef.current) return;
+
+    const name = user?.name || 'Student';
+    announce(
+      `Dashboard page. Welcome ${name}. This page is coming soon. Use the quick links to open subjects, games, progress, or assessments.`,
+      'polite'
+    );
+    hasAnnouncedRef.current = true;
+  }, [isEnabled, isCheckingAccess, user, announce]);
+
+  if (isCheckingAccess) {
+    return <StudentLoadingScreen title="Opening dashboard..." subtitle="Checking your account and getting things ready." />;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-      <div style={{ pointerEvents: 'none' }}>
-        <Navbar 
-          user={{ 
-            name: user?.name || 'Student', 
-            role: user?.role || 'Student', 
-            initials: user?.name?.split(' ').map((n: string) => n[0]).join('').toUpperCase() || 'ST' 
-          }}
-          notifications={3}
-          messages={0}
-          activeLink="dashboard"
-        />
-      </div>
+      <Navbar
+        user={{
+          name: user?.name || 'Student',
+          role: user?.role || 'Student',
+          initials: user?.name?.split(' ').map((n: string) => n[0]).join('').toUpperCase() || 'ST'
+        }}
+        notifications={3}
+        messages={0}
+        activeLink="dashboard"
+      />
 
-      {/* Main Content Area - Coming Soon */}
-      <main className="flex-1 flex items-center justify-center px-4 sm:px-6 lg:px-8 py-8" style={{ pointerEvents: 'none' }}>
+      <main id="main-content" role="main" className="flex-1 flex items-center justify-center px-4 sm:px-6 lg:px-8 py-8">
         <div className="max-w-4xl mx-auto text-center">
           <div className="bg-white rounded-3xl shadow-2xl p-8 sm:p-12 lg:p-16 border border-gray-100">
             {/* Large Icon/Emoji */}
@@ -76,6 +96,46 @@ export default function Dashboard() {
               <p className="text-sm sm:text-base text-gray-700" style={{ fontFamily: 'Andika, sans-serif' }}>
                 💡 <strong>Tip:</strong> In the meantime, you can explore your subjects, play games, and track your progress from the navigation menu!
               </p>
+            </div>
+
+            {/* Quick Links */}
+            <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3 text-left">
+              <Link
+                href="/subjects"
+                className="rounded-xl border border-blue-100 bg-blue-50 hover:bg-blue-100 transition-colors px-4 py-3 flex items-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+                aria-label="Open subjects page"
+                style={{ fontFamily: 'Andika, sans-serif' }}
+              >
+                <Icon icon="mdi:book-open-variant" className="text-blue-600" width={20} height={20} />
+                <span className="text-sm font-semibold text-blue-900">Go to Subjects</span>
+              </Link>
+              <Link
+                href="/games"
+                className="rounded-xl border border-purple-100 bg-purple-50 hover:bg-purple-100 transition-colors px-4 py-3 flex items-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400"
+                aria-label="Open games page"
+                style={{ fontFamily: 'Andika, sans-serif' }}
+              >
+                <Icon icon="mdi:gamepad-variant" className="text-purple-600" width={20} height={20} />
+                <span className="text-sm font-semibold text-purple-900">Go to Games</span>
+              </Link>
+              <Link
+                href="/progress"
+                className="rounded-xl border border-green-100 bg-green-50 hover:bg-green-100 transition-colors px-4 py-3 flex items-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-400"
+                aria-label="Open progress page"
+                style={{ fontFamily: 'Andika, sans-serif' }}
+              >
+                <Icon icon="mdi:chart-line" className="text-green-600" width={20} height={20} />
+                <span className="text-sm font-semibold text-green-900">Go to Progress</span>
+              </Link>
+              <Link
+                href="/assessments"
+                className="rounded-xl border border-orange-100 bg-orange-50 hover:bg-orange-100 transition-colors px-4 py-3 flex items-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-400"
+                aria-label="Open assessments page"
+                style={{ fontFamily: 'Andika, sans-serif' }}
+              >
+                <Icon icon="mdi:clipboard-text-outline" className="text-orange-600" width={20} height={20} />
+                <span className="text-sm font-semibold text-orange-900">Go to Assessments</span>
+              </Link>
             </div>
           </div>
         </div>

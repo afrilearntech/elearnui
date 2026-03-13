@@ -1,4 +1,5 @@
 import { apiRequest } from '../client';
+import { normalizeAdminListResponse } from './normalize';
 
 export interface School {
   id: number;
@@ -38,7 +39,8 @@ export interface BulkUploadSchoolResponse {
 }
 
 export async function getSchools(): Promise<School[]> {
-  return apiRequest<School[]>('/admin/schools/');
+  const response = await apiRequest<unknown>('/admin/schools/');
+  return normalizeAdminListResponse<School>(response, ['schools']);
 }
 
 export async function createSchool(data: CreateSchoolRequest): Promise<School> {

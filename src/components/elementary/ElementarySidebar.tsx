@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useAccessibility } from '@/contexts/AccessibilityContext';
 
 interface ElementarySidebarProps {
   activeItem?: string;
@@ -11,6 +12,7 @@ interface ElementarySidebarProps {
 }
 
 export default function ElementarySidebar({ activeItem = 'home', isMobileMenuOpen, onMobileMenuClose }: ElementarySidebarProps) {
+  const { isEnabled, announce } = useAccessibility();
 
   const navigationItems = [
     {
@@ -81,13 +83,19 @@ export default function ElementarySidebar({ activeItem = 'home', isMobileMenuOpe
 
   return (
     <>
-      <aside className="hidden sm:block fixed left-0 top-16 z-40 bg-white w-[280px] lg:w-[320px] border-r border-[#E5E7EB] shadow-[2px_0_4px_rgba(0,0,0,0.1)] h-[calc(100vh-4rem)] overflow-y-auto">
+      <aside className="hidden sm:block fixed left-0 top-16 z-40 bg-white w-[280px] lg:w-[320px] border-r border-[#E5E7EB] shadow-[2px_0_4px_rgba(0,0,0,0.1)] h-[calc(100vh-4rem)] overflow-y-auto" role="navigation" aria-label="Student sidebar navigation">
         <div className="h-full flex flex-col">
           <nav className="flex-1 pl-4 pr-4 pt-4 pb-4 space-y-4">
             {navigationItems.map((item) => (
               <Link
                 key={item.id}
                 href={item.href}
+                aria-current={activeItem === item.id ? 'page' : undefined}
+                aria-label={`${item.title}${activeItem === item.id ? ', current page' : ''}`}
+                onFocus={() => {
+                  if (!isEnabled) return;
+                  announce(`${item.title}${activeItem === item.id ? ', current page' : ''}. Press Enter to open.`, 'polite');
+                }}
                 className={`flex items-center w-[240px] lg:w-[272px] h-[72px] pl-4 rounded-xl text-white font-medium transition-all duration-200 ${
                   activeItem === item.id 
                     ? `${item.bgColor} shadow-lg` 
@@ -211,7 +219,7 @@ export default function ElementarySidebar({ activeItem = 'home', isMobileMenuOpe
       </aside>
 
       {isMobileMenuOpen && (
-        <div className="sm:hidden fixed inset-0 bg-black/50 z-50">
+        <div className="sm:hidden fixed inset-0 bg-black/50 z-50" role="dialog" aria-modal="true" aria-label="Mobile navigation menu">
           <div className="bg-white h-full w-80 shadow-lg">
             <div className="bg-white shadow-sm border-b border-gray-200 px-4 py-3">
               <div className="flex items-center justify-between">
@@ -235,6 +243,8 @@ export default function ElementarySidebar({ activeItem = 'home', isMobileMenuOpe
               <Link
                 key={item.id}
                 href={item.href}
+                aria-current={activeItem === item.id ? 'page' : undefined}
+                aria-label={`${item.title}${activeItem === item.id ? ', current page' : ''}`}
                 className={`flex flex-col items-center p-4 rounded-xl text-white font-medium transition-all duration-200 ${
                   activeItem === item.id 
                     ? `${item.bgColor} shadow-lg` 

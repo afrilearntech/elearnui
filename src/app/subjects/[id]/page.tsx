@@ -10,8 +10,8 @@ import ElementarySidebar from '@/components/elementary/ElementarySidebar';
 import { getLessonById, LessonDetail, markLessonTaken, getAllLessons, LessonListItem } from '@/lib/api/lessons';
 import { ApiClientError } from '@/lib/api/client';
 import { showErrorToast, formatErrorMessage } from '@/lib/toast';
-import Spinner from '@/components/ui/Spinner';
 import StudentLoadingScreen from '@/components/ui/StudentLoadingScreen';
+import { useAccessibility } from '@/contexts/AccessibilityContext';
 
 function VideoThumbnail({ 
   thumbnail, 
@@ -47,6 +47,7 @@ export default function SubjectLessonDetail() {
   const router = useRouter();
   const params = useParams();
   const lessonId = params?.id as string;
+  const { isEnabled, announce } = useAccessibility();
   
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const handleMenuToggle = () => setIsMobileMenuOpen(!isMobileMenuOpen);
@@ -70,6 +71,7 @@ export default function SubjectLessonDetail() {
   }>({});
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const hasAnnouncedPageRef = useRef(false);
   
   const fallbackVideoSources = [
     '/__mocks__/Addition using sets.mp4',
@@ -148,6 +150,10 @@ export default function SubjectLessonDetail() {
   };
   
   const currentTypeInfo = getResourceTypeInfo(activeResourceTab) || getResourceTypeInfo('video');
+
+  useEffect(() => {
+    hasAnnouncedPageRef.current = false;
+  }, [lessonId]);
 
   useEffect(() => {
     // Get student ID from localStorage (stored during login)
@@ -257,6 +263,45 @@ export default function SubjectLessonDetail() {
     fetchLessonData();
   }, [lessonId, router]);
 
+  useEffect(() => {
+    if (!isEnabled || isLoading || !lesson || hasAnnouncedPageRef.current) return;
+
+    const formatCount = Object.keys(availableResources).length;
+    const message = [
+      `Lesson page: ${lesson.title}.`,
+      `${currentTypeInfo.label} format selected.`,
+      formatCount > 1 ? `${formatCount} formats available.` : 'One learning format available.',
+      'Use format buttons to switch resources.',
+      'Press Escape to close an open resource.',
+    ].join(' ');
+
+    announce(message, 'polite');
+    hasAnnouncedPageRef.current = true;
+  }, [isEnabled, isLoading, lesson, availableResources, currentTypeInfo.label, announce]);
+
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea') return;
+
+      if (isMobileMenuOpen) {
+        setIsMobileMenuOpen(false);
+        return;
+      }
+
+      if (isResourceOpen) {
+        setIsResourceOpen(false);
+        announce('Resource closed.', 'polite');
+      }
+    };
+
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [isMobileMenuOpen, isResourceOpen, announce]);
+
   const handleMediaProgress = async () => {
     if (
       !lesson ||
@@ -303,13 +348,47 @@ export default function SubjectLessonDetail() {
     return <StudentLoadingScreen title="Loading lesson..." subtitle="Preparing your lesson content and activities." />;
   }
 
+  if (!lesson) {
+    return (
+      <div className="min-h-screen">
+        <ElementaryNavbar onMenuToggle={handleMenuToggle} />
+        <div className="flex">
+          <ElementarySidebar activeItem="subjects" isMobileMenuOpen={isMobileMenuOpen} onMobileMenuClose={handleMenuClose} />
+          <main id="main-content" role="main" className="flex-1 bg-linear-to-br from-[#DBEAFE] via-[#F0FDF4] to-[#CFFAFE] sm:pl-[280px] lg:pl-[320px]">
+            <div className="p-6 lg:p-10">
+              <div className="max-w-xl mx-auto bg-white rounded-2xl border border-red-100 shadow-sm p-8 text-center">
+                <div className="mx-auto mb-4 w-14 h-14 rounded-full bg-red-50 flex items-center justify-center">
+                  <Icon icon="mdi:alert-circle-outline" width={30} height={30} className="text-red-500" />
+                </div>
+                <h1 className="text-xl font-bold text-gray-900 mb-2" style={{ fontFamily: 'Andika, sans-serif' }}>
+                  Lesson not available
+                </h1>
+                <p className="text-gray-600 mb-6" style={{ fontFamily: 'Andika, sans-serif' }}>
+                  We could not load this lesson right now. Please go back and choose another lesson.
+                </p>
+                <Link
+                  href="/subjects"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#F97316] text-white font-medium hover:opacity-90 transition-opacity"
+                  style={{ fontFamily: 'Andika, sans-serif' }}
+                >
+                  <Icon icon="mdi:arrow-left" width={18} height={18} />
+                  Back to Subjects
+                </Link>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen">
       <ElementaryNavbar onMenuToggle={handleMenuToggle} />
       <div className="flex">
         <ElementarySidebar activeItem="subjects" isMobileMenuOpen={isMobileMenuOpen} onMobileMenuClose={handleMenuClose} />
 
-        <main className="flex-1 bg-linear-to-br from-[#DBEAFE] via-[#F0FDF4] to-[#CFFAFE] sm:pl-[280px] lg:pl-[320px]">
+        <main id="main-content" role="main" className="flex-1 bg-linear-to-br from-[#DBEAFE] via-[#F0FDF4] to-[#CFFAFE] sm:pl-[280px] lg:pl-[320px]">
           <div className="p-4 lg:p-8">
             {/* Header progress card */}
             <div className="bg-white/60 rounded-xl shadow-md px-4 sm:px-6 py-4 sm:mx-8 mx-4 h-auto lg:h-[187px] flex flex-col justify-between border" style={{ borderColor: 'rgba(59, 130, 246, 0.3)' }}>
@@ -349,7 +428,7 @@ export default function SubjectLessonDetail() {
                       {lesson.status}
                     </span>
                   )}
-                  <Link href="/subjects" className="w-[164px] h-[40px] rounded-full bg-[#F97316] text-white text-[14px] flex items-center justify-center gap-2" style={{ fontFamily: 'Andika, sans-serif' }}>
+                  <Link href="/subjects" aria-label="Back to subjects list" className="w-[164px] h-[40px] rounded-full bg-[#F97316] text-white text-[14px] flex items-center justify-center gap-2" style={{ fontFamily: 'Andika, sans-serif' }}>
                     <Icon icon="mdi:arrow-left" width={18} height={18} />
                     Back to Subjects
                   </Link>
@@ -380,7 +459,7 @@ export default function SubjectLessonDetail() {
                   
                   {hasMultipleResources && (
                     <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
-                      <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Lesson resource formats">
                         <span className="text-xs font-semibold text-gray-600 mr-2" style={{ fontFamily: 'Andika, sans-serif' }}>
                           Choose Format:
                         </span>
@@ -390,6 +469,10 @@ export default function SubjectLessonDetail() {
                               setActiveResourceTab('video');
                               setIsResourceOpen(true);
                             }}
+                            role="tab"
+                            aria-selected={activeResourceTab === 'video'}
+                            aria-controls="lesson-resource-panel"
+                            aria-label="Video format"
                             className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-all ${
                               activeResourceTab === 'video'
                                 ? 'bg-red-500 text-white shadow-md'
@@ -407,6 +490,10 @@ export default function SubjectLessonDetail() {
                               setActiveResourceTab('audio');
                               setIsResourceOpen(true);
                             }}
+                            role="tab"
+                            aria-selected={activeResourceTab === 'audio'}
+                            aria-controls="lesson-resource-panel"
+                            aria-label="Audio format"
                             className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-all ${
                               activeResourceTab === 'audio'
                                 ? 'bg-purple-500 text-white shadow-md'
@@ -424,6 +511,10 @@ export default function SubjectLessonDetail() {
                               setActiveResourceTab('pdf');
                               setIsResourceOpen(true);
                             }}
+                            role="tab"
+                            aria-selected={activeResourceTab === 'pdf'}
+                            aria-controls="lesson-resource-panel"
+                            aria-label="PDF format"
                             className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-all ${
                               activeResourceTab === 'pdf'
                                 ? 'bg-red-600 text-white shadow-md'
@@ -441,6 +532,10 @@ export default function SubjectLessonDetail() {
                               setActiveResourceTab('ppt');
                               setIsResourceOpen(true);
                             }}
+                            role="tab"
+                            aria-selected={activeResourceTab === 'ppt'}
+                            aria-controls="lesson-resource-panel"
+                            aria-label="PowerPoint format"
                             className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-all ${
                               activeResourceTab === 'ppt'
                                 ? 'bg-orange-500 text-white shadow-md'
@@ -458,6 +553,10 @@ export default function SubjectLessonDetail() {
                               setActiveResourceTab('doc');
                               setIsResourceOpen(true);
                             }}
+                            role="tab"
+                            aria-selected={activeResourceTab === 'doc'}
+                            aria-controls="lesson-resource-panel"
+                            aria-label="Document format"
                             className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-all ${
                               activeResourceTab === 'doc'
                                 ? 'bg-blue-600 text-white shadow-md'
@@ -473,7 +572,7 @@ export default function SubjectLessonDetail() {
                     </div>
                   )}
                   
-                  <div className={`relative w-full bg-gray-100 ${
+                  <div id="lesson-resource-panel" role="region" aria-label={`${currentTypeInfo.label} resource panel`} className={`relative w-full bg-gray-100 ${
                     (activeResourceTab === 'pdf' || activeResourceTab === 'ppt' || activeResourceTab === 'doc') && isResourceOpen
                       ? 'h-[500px] sm:h-[600px] lg:h-[700px]' 
                       : 'h-[220px] sm:h-[320px] lg:h-[460px]'
@@ -486,6 +585,7 @@ export default function SubjectLessonDetail() {
                           src={availableResources.video}
                           controls
                           autoPlay
+                          aria-label={`Video player for ${lesson.title}`}
                           onTimeUpdate={handleMediaProgress}
                           onError={(e) => {
                             const currentSrc = (e.target as HTMLVideoElement).src;
@@ -505,6 +605,7 @@ export default function SubjectLessonDetail() {
                             src={availableResources.audio}
                             controls
                             autoPlay
+                            aria-label={`Audio player for ${lesson.title}`}
                             onTimeUpdate={handleMediaProgress}
                           />
                           <p className="text-sm text-gray-600 mt-4 text-center" style={{ fontFamily: 'Andika, sans-serif' }}>
@@ -676,6 +777,7 @@ export default function SubjectLessonDetail() {
                       {nextLessonId ? (
                         <button
                           onClick={() => router.push(`/subjects/${nextLessonId}`)}
+                          aria-label="Open next lesson"
                           className="flex-1 h-10 rounded-lg bg-linear-to-r from-[#10B981] to-[#3B82F6] text-white text-xs sm:text-sm flex items-center justify-center gap-2 hover:opacity-90 transition-opacity"
                           style={{ fontFamily: 'Andika, sans-serif' }}
                         >
@@ -684,6 +786,7 @@ export default function SubjectLessonDetail() {
                       ) : (
                         <button
                           disabled
+                          aria-label="You are on the last lesson"
                           className="flex-1 h-10 rounded-lg bg-gray-300 text-gray-500 text-xs sm:text-sm flex items-center justify-center gap-2 cursor-not-allowed"
                           style={{ fontFamily: 'Andika, sans-serif' }}
                         >
@@ -692,6 +795,7 @@ export default function SubjectLessonDetail() {
                       )}
                       <button
                         onClick={() => router.push('/assessments')}
+                        aria-label="Go to assessments"
                         className="flex-1 h-10 rounded-lg bg-linear-to-r from-[#FB923C] to-[#EF4444] text-white text-xs sm:text-sm flex items-center justify-center gap-2 hover:opacity-90 transition-opacity"
                         style={{ fontFamily: 'Andika, sans-serif' }}
                       >

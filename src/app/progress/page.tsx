@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import ElementaryNavbar from '@/components/elementary/ElementaryNavbar';
 import ElementarySidebar from '@/components/elementary/ElementarySidebar';
@@ -10,6 +10,7 @@ import { getProgressGarden } from '@/lib/api/dashboard';
 import { ApiClientError } from '@/lib/api/client';
 import { showErrorToast, formatErrorMessage } from '@/lib/toast';
 import StudentLoadingScreen from '@/components/ui/StudentLoadingScreen';
+import { useAccessibility } from '@/contexts/AccessibilityContext';
 
 interface Plant {
   id: number;
@@ -69,10 +70,12 @@ const getSubjectColors = (name: string): { color: string; bgColor: string } => {
 
 export default function ProgressPage() {
   const router = useRouter();
+  const { isEnabled, announce } = useAccessibility();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [progressData, setProgressData] = useState<any>(null);
   const [selectedPlant, setSelectedPlant] = useState<Plant | null>(null);
+  const hasAnnouncedPageRef = useRef(false);
 
   useEffect(() => {
     const fetchProgressData = async () => {
@@ -179,6 +182,40 @@ export default function ProgressPage() {
 
   const plants: Plant[] = [...realPlants, ...lockedPlants];
 
+  useEffect(() => {
+    if (!isEnabled || isLoading || hasAnnouncedPageRef.current) return;
+    const schoolRankText = formatRank(progressData?.rank_in_school);
+    announce(
+      `Progress garden loaded. You have ${realPlants.length} active plants and ${lockedPlants.length} locked plants. ` +
+      `School rank: ${schoolRankText}. Select a plant card to open details. Press Escape to close popups.`,
+      'polite'
+    );
+    hasAnnouncedPageRef.current = true;
+  }, [isEnabled, isLoading, realPlants.length, lockedPlants.length, progressData, announce]);
+
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea') return;
+
+      if (selectedPlant) {
+        setSelectedPlant(null);
+        announce('Plant details closed.', 'polite');
+        return;
+      }
+
+      if (isMobileMenuOpen) {
+        setIsMobileMenuOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [selectedPlant, isMobileMenuOpen, announce]);
+
   const getPlantSize = (level: number) => {
     const sizes = ['text-4xl', 'text-5xl', 'text-6xl', 'text-7xl', 'text-8xl'];
     return sizes[Math.min(level - 1, 4)] || sizes[0];
@@ -208,6 +245,10 @@ export default function ProgressPage() {
       return (
         <div
           key={plant.id}
+          tabIndex={0}
+          aria-disabled="true"
+          role="article"
+          aria-label={`${plant.name} is locked. Coming soon.`}
           className={`${plant.bgColor} rounded-3xl p-6 border-4 border-dashed border-gray-300 relative overflow-hidden opacity-60`}
         >
           <div className="flex flex-col items-center justify-center h-48">
@@ -236,6 +277,15 @@ export default function ProgressPage() {
       <div
         key={plant.id}
         onClick={() => setSelectedPlant(plant)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            setSelectedPlant(plant);
+          }
+        }}
+        tabIndex={0}
+        role="button"
+        aria-label={`${plant.name}. Level ${plant.level}. ${Math.round(plant.progress)} percent complete. Open plant details.`}
         className={`${plant.bgColor} rounded-3xl p-6 border-4 border-white shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 cursor-pointer relative overflow-hidden`}
       >
         <div className="absolute top-2 right-2 bg-white/80 rounded-full px-3 py-1 flex items-center gap-1 z-10">
@@ -314,7 +364,7 @@ export default function ProgressPage() {
           onMobileMenuClose={handleMenuClose} 
         />
         
-        <main className="flex-1 sm:pl-[280px] lg:pl-[320px] overflow-x-hidden">
+        <main id="main-content" role="main" className="flex-1 sm:pl-[280px] lg:pl-[320px] overflow-x-hidden">
           <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
             <div className="mb-6">
               <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-2 bg-linear-to-r from-green-600 via-blue-600 to-purple-600 bg-clip-text text-transparent" style={{ fontFamily: 'Andika, sans-serif' }}>
@@ -450,7 +500,13 @@ export default function ProgressPage() {
             </div>
 
             {selectedPlant && (
-              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedPlant(null)}>
+              <div
+                className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+                onClick={() => setSelectedPlant(null)}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="plant-detail-title"
+              >
                 <div
                   className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl"
                   onClick={(e) => e.stopPropagation()}
@@ -470,12 +526,13 @@ export default function ProgressPage() {
                       ) : (
                         <span className="text-4xl">{selectedPlant.emoji}</span>
                       )}
-                      <h3 className="text-2xl font-bold text-gray-800" style={{ fontFamily: 'Andika, sans-serif' }}>
+                      <h3 id="plant-detail-title" className="text-2xl font-bold text-gray-800" style={{ fontFamily: 'Andika, sans-serif' }}>
                         {selectedPlant.name}
                       </h3>
                     </div>
                     <button
                       onClick={() => setSelectedPlant(null)}
+                      aria-label="Close plant details"
                       className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 hover:bg-gray-200 shrink-0"
                     >
                       <Icon icon="mdi:close" width={20} height={20} />

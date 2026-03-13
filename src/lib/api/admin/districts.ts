@@ -1,4 +1,5 @@
 import { apiRequest } from '../client';
+import { normalizeAdminListResponse } from './normalize';
 
 export interface District {
   id: number;
@@ -44,7 +45,8 @@ export interface BulkUploadDistrictResponse {
 }
 
 export async function getDistricts(): Promise<District[]> {
-  return apiRequest<District[]>('/admin/districts/');
+  const response = await apiRequest<unknown>('/admin/districts/');
+  return normalizeAdminListResponse<District>(response, ['districts']);
 }
 
 export async function getApprovedDistricts(): Promise<District[]> {

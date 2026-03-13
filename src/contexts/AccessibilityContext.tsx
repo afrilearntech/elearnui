@@ -33,6 +33,7 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
   const isSpeakingRef = useRef(false);
   const voicesLoadedRef = useRef(false);
   const femaleVoiceRef = useRef<SpeechSynthesisVoice | null>(null);
+  const welcomeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Load and select female voice
   const loadFemaleVoice = useCallback(() => {
@@ -254,15 +255,15 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
       setIsFirstVisit(true);
     }
     
-    // Try to speak welcome message on page load
-    // Note: Browser will likely block this without user interaction, 
-    // but StartPrompt will handle it properly after user clicks/interacts
-    // We still try here in case the browser allows it (some browsers do after first interaction)
-    console.log('🎤 Attempting to speak welcome message on page load...');
-    // Small delay to let voices load
-    setTimeout(() => {
-      speakWelcomeMessage();
-    }, 500);
+    // Only announce onboarding prompt if user has never dismissed it
+    // and accessibility mode is not already enabled.
+    const promptDismissed = localStorage.getItem('accessibility_prompt_dismissed') === 'true';
+    if (!wasEnabled && !promptDismissed) {
+      console.log('🎤 Attempting to speak welcome onboarding message...');
+      welcomeTimerRef.current = setTimeout(() => {
+        speakWelcomeMessage();
+      }, 500);
+    }
 
     // Initialize Web Audio API for sound cues
     try {
@@ -284,6 +285,12 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
         loadFemaleVoice();
       }, 100);
     }
+
+    return () => {
+      if (welcomeTimerRef.current) {
+        clearTimeout(welcomeTimerRef.current);
+      }
+    };
   }, [speakWelcomeMessage, loadFemaleVoice]);
 
   // Note: User interaction handler removed - StartPrompt component handles this now
@@ -488,6 +495,7 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
   const enable = useCallback(() => {
     setIsEnabled(true);
     localStorage.setItem('accessibility_mode_enabled', 'true');
+    localStorage.setItem('accessibility_prompt_dismissed', 'true');
     // Announce after state update
     setTimeout(() => {
       const message = 'Accessibility mode activated. Automatic screen reader is now enabled. All content will be read aloud automatically. You can now use keyboard shortcuts. Press question mark for keyboard shortcuts help. Press and hold Shift key again to disable.';
@@ -499,6 +507,8 @@ export function AccessibilityProvider({ children }: { children: React.ReactNode 
   const disable = useCallback(() => {
     setIsEnabled(false);
     localStorage.setItem('accessibility_mode_enabled', 'false');
+    // Keep prompt dismissed so returning users are not repeatedly re-onboarded.
+    localStorage.setItem('accessibility_prompt_dismissed', 'true');
     // Stop any ongoing speech
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();

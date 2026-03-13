@@ -1,4 +1,5 @@
 import { apiRequest } from '../client';
+import { normalizeAdminListResponse } from './normalize';
 
 export interface ReportFilter {
   month?: number; // 1-12, defaults to current month
@@ -96,14 +97,18 @@ export async function getSystemReports(filter?: ReportFilter): Promise<SystemRep
   const queryString = queryParams.toString();
   const endpoint = `/admin/system-reports/${queryString ? `?${queryString}` : ''}`;
   
-  const response = await apiRequest<SystemReport | SystemReport[]>(endpoint);
-  
-  // Handle both single object and array responses
-  if (Array.isArray(response)) {
-    return response;
-  } else {
-    return [response];
+  const response = await apiRequest<unknown>(endpoint);
+  const normalizedList = normalizeAdminListResponse<SystemReport>(response, ['reports']);
+
+  if (normalizedList.length > 0) {
+    return normalizedList;
   }
+
+  if (response && typeof response === 'object' && !Array.isArray(response)) {
+    return [response as SystemReport];
+  }
+
+  return [];
 }
 
 export async function exportReports(filter?: ReportFilter, format: 'csv' | 'pdf' = 'csv'): Promise<Blob> {

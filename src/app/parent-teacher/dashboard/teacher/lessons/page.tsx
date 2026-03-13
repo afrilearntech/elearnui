@@ -505,16 +505,15 @@ export default function LessonsPage() {
           {sortedLessons.length > 0 ? (
             <>
               <div className="overflow-x-auto rounded-lg border border-gray-200">
-                <table className="w-full">
+                <table className="w-full table-fixed min-w-[980px]">
                   <thead>
                     <tr className="border-b border-gray-200 bg-gray-50">
-                      <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">Lesson</th>
-                      <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">Subject</th>
-                      <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">Grade</th>
-                      <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">Status</th>
-                      <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">Duration</th>
-                      <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">Created</th>
-                      <th className="text-right py-3 px-4 text-xs font-semibold text-gray-600 uppercase">Actions</th>
+                      <th className="w-[34%] text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">Lesson</th>
+                      <th className="w-[20%] text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">Subject</th>
+                      <th className="w-[12%] text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">Grade</th>
+                      <th className="w-[10%] text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">Duration</th>
+                      <th className="w-[12%] text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">Created</th>
+                      <th className="w-[12%] text-right py-3 px-4 text-xs font-semibold text-gray-600 uppercase">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -532,8 +531,8 @@ export default function LessonsPage() {
                                 }}
                               />
                             )}
-                            <div>
-                              <p className="font-semibold text-gray-900">{lesson.title}</p>
+                            <div className="min-w-0">
+                              <p className="font-semibold text-gray-900 truncate">{lesson.title}</p>
                               <div className="flex items-center gap-2 mt-0.5">
                                 <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border ${getTypeColor(lesson.type)}`}>
                                   {lesson.type}
@@ -548,16 +547,11 @@ export default function LessonsPage() {
                           </div>
                         </td>
                         <td className="py-4 px-4">
-                          <span className="text-sm font-medium text-gray-800">{lesson.subjectName}</span>
+                          <span className="block text-sm font-medium text-gray-800 truncate">{lesson.subjectName}</span>
                         </td>
                         <td className="py-4 px-4">
                           <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${getGradeColor(lesson.grade)}`}>
                             {lesson.grade}
-                          </span>
-                        </td>
-                        <td className="py-4 px-4">
-                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${getStatusColor(lesson.status)}`}>
-                            {lesson.status}
                           </span>
                         </td>
                         <td className="py-4 px-4">

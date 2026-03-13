@@ -1,4 +1,5 @@
 import { apiRequest } from '../client';
+import { normalizeAdminListResponse } from './normalize';
 
 export interface AdminUser {
   id: number;
@@ -18,7 +19,8 @@ export interface AdminUser {
 }
 
 export async function getAdminUsers(): Promise<AdminUser[]> {
-  return await apiRequest<AdminUser[]>('/admin/users/');
+  const response = await apiRequest<unknown>('/admin/users/');
+  return normalizeAdminListResponse<AdminUser>(response, ['users']);
 }
 
 export interface AdminParent {
@@ -30,6 +32,7 @@ export interface AdminParent {
 }
 
 export async function getAdminParents(): Promise<AdminParent[]> {
-  return await apiRequest<AdminParent[]>('/admin/parents/');
+  const response = await apiRequest<unknown>('/admin/parents/');
+  return normalizeAdminListResponse<AdminParent>(response, ['parents']);
 }
 

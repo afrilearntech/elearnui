@@ -1,4 +1,5 @@
 import { apiRequest } from '../client';
+import { normalizeAdminListResponse } from './normalize';
 
 export interface County {
   id: number;
@@ -40,7 +41,8 @@ export interface BulkUploadCountyResponse {
 }
 
 export async function getCounties(): Promise<County[]> {
-  return apiRequest<County[]>('/admin/counties/');
+  const response = await apiRequest<unknown>('/admin/counties/');
+  return normalizeAdminListResponse<County>(response, ['counties']);
 }
 
 export async function createCounty(

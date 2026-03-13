@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import ElementaryNavbar from '@/components/elementary/ElementaryNavbar';
 import ElementarySidebar from '@/components/elementary/ElementarySidebar';
@@ -9,13 +9,16 @@ import { getKidsGrades, LessonGrade, GeneralGrade } from '@/lib/api/dashboard';
 import { ApiClientError } from '@/lib/api/client';
 import { showErrorToast, formatErrorMessage } from '@/lib/toast';
 import StudentLoadingScreen from '@/components/ui/StudentLoadingScreen';
+import { useAccessibility } from '@/contexts/AccessibilityContext';
 
 export default function FunzonePage() {
   const router = useRouter();
+  const { isEnabled, announce } = useAccessibility();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [gradesData, setGradesData] = useState<{ lesson_grades: LessonGrade[]; general_grades: GeneralGrade[] } | null>(null);
   const [activeTab, setActiveTab] = useState<'lessons' | 'general'>('lessons');
+  const hasAnnouncedPageRef = useRef(false);
 
   useEffect(() => {
     const fetchGrades = async () => {
@@ -46,6 +49,31 @@ export default function FunzonePage() {
 
   const handleMenuToggle = () => setIsMobileMenuOpen(!isMobileMenuOpen);
   const handleMenuClose = () => setIsMobileMenuOpen(false);
+  const lessonGrades = gradesData?.lesson_grades || [];
+  const generalGrades = gradesData?.general_grades || [];
+  const totalGrades = lessonGrades.length + generalGrades.length;
+
+  useEffect(() => {
+    if (!isEnabled || isLoading || hasAnnouncedPageRef.current) return;
+    announce(
+      `Grades page loaded. You have ${lessonGrades.length} lesson grades and ${generalGrades.length} assignment grades. ` +
+      `Use the tabs to switch between lesson grades and assignment grades.`,
+      'polite'
+    );
+    hasAnnouncedPageRef.current = true;
+  }, [isEnabled, isLoading, lessonGrades.length, generalGrades.length, announce]);
+
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (isMobileMenuOpen) {
+        setIsMobileMenuOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [isMobileMenuOpen]);
 
   const calculatePercentage = (score: number, marks: number): number => {
     if (marks === 0) return 0;
@@ -182,10 +210,6 @@ export default function FunzonePage() {
     );
   }
 
-  const lessonGrades = gradesData?.lesson_grades || [];
-  const generalGrades = gradesData?.general_grades || [];
-  const totalGrades = lessonGrades.length + generalGrades.length;
-
   const calculateAverage = (grades: (LessonGrade | GeneralGrade)[]): number => {
     if (grades.length === 0) return 0;
     const total = grades.reduce((sum, grade) => sum + calculatePercentage(grade.score, grade.marks), 0);
@@ -207,7 +231,7 @@ export default function FunzonePage() {
           onMobileMenuClose={handleMenuClose} 
         />
         
-        <main className="flex-1 bg-linear-to-br from-[#DBEAFE] via-[#F0FDF4] to-[#CFFAFE] sm:pl-[280px] lg:pl-[320px] overflow-x-hidden">
+        <main id="main-content" role="main" className="flex-1 bg-linear-to-br from-[#DBEAFE] via-[#F0FDF4] to-[#CFFAFE] sm:pl-[280px] lg:pl-[320px] overflow-x-hidden">
           <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
             <div className="mb-6">
               <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-2 bg-linear-to-r from-blue-600 via-green-600 to-cyan-600 bg-clip-text text-transparent" style={{ fontFamily: 'Andika, sans-serif' }}>
@@ -262,9 +286,16 @@ export default function FunzonePage() {
               </div>
             </div>
 
-            <div className="bg-white rounded-3xl p-2 mb-6 shadow-lg border-2 border-gray-100 inline-flex">
+            <div className="bg-white rounded-3xl p-2 mb-6 shadow-lg border-2 border-gray-100 inline-flex" role="tablist" aria-label="Grades categories">
               <button
-                onClick={() => setActiveTab('lessons')}
+                onClick={() => {
+                  setActiveTab('lessons');
+                  if (isEnabled) announce(`Lesson grades tab selected. ${lessonGrades.length} item${lessonGrades.length === 1 ? '' : 's'}.`, 'polite');
+                }}
+                role="tab"
+                aria-selected={activeTab === 'lessons'}
+                aria-controls="lessons-grades-panel"
+                aria-label={`Lesson grades tab. ${lessonGrades.length} item${lessonGrades.length === 1 ? '' : 's'}.`}
                 className={`px-6 py-3 rounded-2xl font-semibold text-sm transition-all duration-200 flex items-center gap-2 ${
                   activeTab === 'lessons'
                     ? 'bg-gradient-to-r from-[#60A5FA] to-[#2563EB] text-white shadow-md'
@@ -281,7 +312,14 @@ export default function FunzonePage() {
                 )}
               </button>
               <button
-                onClick={() => setActiveTab('general')}
+                onClick={() => {
+                  setActiveTab('general');
+                  if (isEnabled) announce(`Assignment grades tab selected. ${generalGrades.length} item${generalGrades.length === 1 ? '' : 's'}.`, 'polite');
+                }}
+                role="tab"
+                aria-selected={activeTab === 'general'}
+                aria-controls="general-grades-panel"
+                aria-label={`Assignment grades tab. ${generalGrades.length} item${generalGrades.length === 1 ? '' : 's'}.`}
                 className={`px-6 py-3 rounded-2xl font-semibold text-sm transition-all duration-200 flex items-center gap-2 ${
                   activeTab === 'general'
                     ? 'bg-gradient-to-r from-[#60A5FA] to-[#2563EB] text-white shadow-md'
@@ -300,17 +338,17 @@ export default function FunzonePage() {
             </div>
 
             {activeTab === 'lessons' && (
-              <div>
+              <div id="lessons-grades-panel" role="tabpanel" aria-label="Lesson grades panel">
                 <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2" style={{ fontFamily: 'Andika, sans-serif' }}>
                   <Icon icon="mdi:book-open-variant" className="text-blue-500" width={28} height={28} />
                   Lesson Assessment Grades
                 </h2>
                 {lessonGrades.length > 0 ? (
-                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4" aria-live="polite" aria-label={`${lessonGrades.length} lesson grade cards`}>
                     {lessonGrades.map(grade => renderGradeCard(grade, 'lesson'))}
                   </div>
                 ) : (
-                  <div className="bg-white rounded-3xl p-12 text-center border-2 border-dashed border-gray-300">
+                  <div className="bg-white rounded-3xl p-12 text-center border-2 border-dashed border-gray-300" role="status" aria-live="polite">
                     <div className="text-6xl mb-4">📚</div>
                     <h3 className="text-xl font-bold text-gray-700 mb-2" style={{ fontFamily: 'Andika, sans-serif' }}>
                       No lesson grades yet!
@@ -324,17 +362,17 @@ export default function FunzonePage() {
             )}
 
             {activeTab === 'general' && (
-              <div>
+              <div id="general-grades-panel" role="tabpanel" aria-label="Assignment grades panel">
                 <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2" style={{ fontFamily: 'Andika, sans-serif' }}>
                   <Icon icon="mdi:file-document" className="text-orange-500" width={28} height={28} />
                   Assignment Grades
                 </h2>
                 {generalGrades.length > 0 ? (
-                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4" aria-live="polite" aria-label={`${generalGrades.length} assignment grade cards`}>
                     {generalGrades.map(grade => renderGradeCard(grade, 'general'))}
                   </div>
                 ) : (
-                  <div className="bg-white rounded-3xl p-12 text-center border-2 border-dashed border-gray-300">
+                  <div className="bg-white rounded-3xl p-12 text-center border-2 border-dashed border-gray-300" role="status" aria-live="polite">
                     <div className="text-6xl mb-4">📝</div>
                     <h3 className="text-xl font-bold text-gray-700 mb-2" style={{ fontFamily: 'Andika, sans-serif' }}>
                       No assignment grades yet!

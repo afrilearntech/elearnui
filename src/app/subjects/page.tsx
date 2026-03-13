@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -11,6 +11,8 @@ import { getElementarySubjectsAndLessons } from '@/lib/api/dashboard';
 import { ApiClientError } from '@/lib/api/client';
 import { showErrorToast, formatErrorMessage } from '@/lib/toast';
 import StudentLoadingScreen from '@/components/ui/StudentLoadingScreen';
+import { useAccessibility } from '@/contexts/AccessibilityContext';
+import { usePageAccessibility } from '@/hooks/usePageAccessibility';
 
 type SubjectMediaTab = 'video' | 'audio' | 'file';
 
@@ -205,6 +207,7 @@ function getLessonProgressState(lesson: any) {
 
 export default function SubjectsLessonsPage() {
   const router = useRouter();
+  const { isEnabled, announce } = useAccessibility();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [lessons, setLessons] = useState<any[]>([]);
@@ -212,6 +215,15 @@ export default function SubjectsLessonsPage() {
   const [selectedSubject, setSelectedSubject] = useState<string>('');
   const [selectedMediaTab, setSelectedMediaTab] = useState<SubjectMediaTab>('video');
   const [searchQuery, setSearchQuery] = useState('');
+  const lastA11yAnnouncementRef = useRef<number>(0);
+
+  const announceWithDebounce = useCallback((message: string) => {
+    if (!isEnabled) return;
+    const now = Date.now();
+    if (now - lastA11yAnnouncementRef.current < 700) return;
+    lastA11yAnnouncementRef.current = now;
+    announce(message, 'polite');
+  }, [isEnabled, announce]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -324,6 +336,14 @@ export default function SubjectsLessonsPage() {
   const selectedSubjectName =
     uniqueSubjects.find((subject) => subject.id.toString() === selectedSubject)?.name || 'this subject';
 
+  usePageAccessibility({
+    pageTitle: 'Subject World',
+    pageDescription: `${selectedSubjectName} selected. ${getMediaTabLabel(selectedMediaTab)} tab active with ${filteredLessons.length} lesson${filteredLessons.length === 1 ? '' : 's'}.`,
+    actions: ['Choose a subject', 'Switch media tabs', 'Search lessons', 'Open an unlocked lesson'],
+    autoRead: true,
+    delay: 700,
+  });
+
   if (isLoading) {
     return <StudentLoadingScreen title="Loading subjects..." subtitle="Bringing your subjects and lessons into view." />;
   }
@@ -335,7 +355,7 @@ export default function SubjectsLessonsPage() {
       <div className="flex">
         <ElementarySidebar activeItem="subjects" isMobileMenuOpen={isMobileMenuOpen} onMobileMenuClose={handleMenuClose} />
 
-        <main className="flex-1 bg-linear-to-br from-[#DBEAFE] via-[#F0FDF4] to-[#CFFAFE] sm:pl-[280px] lg:pl-[320px]">
+        <main id="main-content" role="main" className="flex-1 bg-linear-to-br from-[#DBEAFE] via-[#F0FDF4] to-[#CFFAFE] sm:pl-[280px] lg:pl-[320px]">
           <div className="p-4 lg:p-8">
             {/* Title Section */}
             <div className="sm:ml-8 sm:mr-8 mb-6">
@@ -369,6 +389,9 @@ export default function SubjectsLessonsPage() {
                   <button
                     key={subject.id}
                     onClick={() => setSelectedSubject(subject.id.toString())}
+                    aria-pressed={isSelected}
+                    aria-label={`${subject.name}${isSelected ? ', selected' : ''}. Press Enter to view lessons.`}
+                    onFocus={() => announceWithDebounce(`${subject.name}${isSelected ? ', selected' : ''}.`)}
                     className={`px-4 py-2.5 rounded-lg text-sm font-medium flex items-center gap-2 transition-all ${
                       isSelected
                         ? 'bg-[#60A5FA] text-white shadow-sm'
@@ -388,6 +411,9 @@ export default function SubjectsLessonsPage() {
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   onClick={() => setSelectedMediaTab('video')}
+                  aria-pressed={selectedMediaTab === 'video'}
+                  aria-label={`Videos tab. ${mediaTabCounts.video} item${mediaTabCounts.video === 1 ? '' : 's'}. ${selectedMediaTab === 'video' ? 'Selected.' : ''}`}
+                  onFocus={() => announceWithDebounce(`Videos tab. ${mediaTabCounts.video} items.`)}
                   className={`px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 transition-all ${
                     selectedMediaTab === 'video'
                       ? 'bg-red-500 text-white shadow-sm'
@@ -403,6 +429,9 @@ export default function SubjectsLessonsPage() {
                 </button>
                 <button
                   onClick={() => setSelectedMediaTab('audio')}
+                  aria-pressed={selectedMediaTab === 'audio'}
+                  aria-label={`Audios tab. ${mediaTabCounts.audio} item${mediaTabCounts.audio === 1 ? '' : 's'}. ${selectedMediaTab === 'audio' ? 'Selected.' : ''}`}
+                  onFocus={() => announceWithDebounce(`Audios tab. ${mediaTabCounts.audio} items.`)}
                   className={`px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 transition-all ${
                     selectedMediaTab === 'audio'
                       ? 'bg-purple-500 text-white shadow-sm'
@@ -418,6 +447,9 @@ export default function SubjectsLessonsPage() {
                 </button>
                 <button
                   onClick={() => setSelectedMediaTab('file')}
+                  aria-pressed={selectedMediaTab === 'file'}
+                  aria-label={`Files tab. ${mediaTabCounts.file} item${mediaTabCounts.file === 1 ? '' : 's'}. ${selectedMediaTab === 'file' ? 'Selected.' : ''}`}
+                  onFocus={() => announceWithDebounce(`Files tab. ${mediaTabCounts.file} items.`)}
                   className={`px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 transition-all ${
                     selectedMediaTab === 'file'
                       ? 'bg-blue-500 text-white shadow-sm'
@@ -440,6 +472,8 @@ export default function SubjectsLessonsPage() {
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
+                    aria-label={`Search within ${getMediaTabLabel(selectedMediaTab)} for ${selectedSubjectName}`}
+                    onFocus={() => announceWithDebounce(`Search ${getMediaTabLabel(selectedMediaTab).toLowerCase()} for ${selectedSubjectName}.`)}
                     placeholder={`Search ${selectedMediaTab === 'video' ? 'videos' : selectedMediaTab === 'audio' ? 'audios' : 'files'}...`}
                     className="w-full h-11 pl-10 pr-4 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#60A5FA] focus:border-[#60A5FA]"
                     style={{ fontFamily: 'Andika, sans-serif' }}
@@ -551,6 +585,10 @@ export default function SubjectsLessonsPage() {
                       <article
                         key={lesson.id}
                         aria-disabled="true"
+                        tabIndex={0}
+                        role="article"
+                        aria-label={`${lesson.title}. Locked. ${progressState.lockReason}`}
+                        onFocus={() => announceWithDebounce(`${lesson.title}. Locked. ${progressState.lockReason}`)}
                         className={`bg-white rounded-xl shadow-md overflow-hidden border ${borderColor} cursor-not-allowed`}
                       >
                         {cardContent}
@@ -559,6 +597,8 @@ export default function SubjectsLessonsPage() {
                       <Link
                         href={`/subjects/${lesson.id}`}
                         key={lesson.id}
+                        aria-label={`${lesson.title}. ${progressState.isCompleted ? 'Completed' : 'Ready'}. ${typeInfo.action} lesson ${typeof lesson.sequence_position === 'number' ? lesson.sequence_position : ''}.`}
+                        onFocus={() => announceWithDebounce(`${lesson.title}. ${progressState.isCompleted ? 'Completed' : 'Ready to open'}.`)}
                         className={`bg-white rounded-xl shadow-md overflow-hidden border ${borderColor} hover:shadow-lg transition-shadow duration-200`}
                       >
                         {cardContent}
