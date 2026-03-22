@@ -78,19 +78,32 @@ export async function getTeacherDashboard(): Promise<TeacherDashboard> {
   return await apiRequest<TeacherDashboard>('/teacher/dashboard/');
 }
 
+export interface HeadTeacherDashboard extends TeacherDashboard {}
+
+export async function getHeadTeacherDashboard(): Promise<HeadTeacherDashboard> {
+  return await apiRequest<HeadTeacherDashboard>('/headteacher/dashboard/');
+}
+
 export async function getTeachers(): Promise<TeacherRecord[]> {
   return await apiRequest<TeacherRecord[]>('/content/teachers/');
+}
+
+export async function getHeadTeacherTeachers(): Promise<TeacherRecord[]> {
+  return await apiRequest<TeacherRecord[]>('/headteacher/teachers/');
 }
 
 export interface GeneralAssessment {
   id: number;
   title: string;
-  type: "QUIZ" | "ASSIGNMENT";
+  type: "QUIZ" | "ASSIGNMENT" | "TRIAL";
   given_by: number;
   instructions: string;
   marks: number;
   due_at: string;
   grade: string;
+  ai_recommended?: boolean;
+  is_targeted?: boolean;
+  target_student?: number | null;
   status: string;
   moderation_comment: string;
   created_at: string;
@@ -128,6 +141,10 @@ export async function getGeneralAssessments(): Promise<GeneralAssessment[]> {
   return await apiRequest<GeneralAssessment[]>('/teacher/general-assessments/');
 }
 
+export async function getHeadTeacherGeneralAssessments(): Promise<GeneralAssessment[]> {
+  return await apiRequest<GeneralAssessment[]>('/headteacher/general-assessments/');
+}
+
 export async function createGeneralAssessment(payload: CreateGeneralAssessmentRequest): Promise<CreateGeneralAssessmentResponse> {
   // Don't send given_by - let the backend infer it from the authentication token
   const { given_by, ...requestPayload } = payload;
@@ -145,6 +162,7 @@ export interface CreateTeacherRequest {
   gender: string;
   dob: string;
   school_id: number;
+  status?: string;
 }
 
 export interface CreateTeacherResponse {
@@ -175,6 +193,13 @@ export interface CreateTeacherResponse {
 
 export async function createTeacher(payload: CreateTeacherRequest): Promise<CreateTeacherResponse> {
   return await apiRequest<CreateTeacherResponse>('/content/teachers/create/', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function createHeadTeacherTeacher(payload: CreateTeacherRequest): Promise<CreateTeacherResponse> {
+  return await apiRequest<CreateTeacherResponse>('/headteacher/teachers/create/', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
@@ -235,6 +260,42 @@ export async function downloadTeacherBulkTemplate(): Promise<Blob> {
   return await response.blob();
 }
 
+export async function downloadHeadTeacherTeacherBulkTemplate(): Promise<Blob> {
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (!API_BASE_URL) {
+    throw new ApiClientError('API base URL is not configured', 0);
+  }
+
+  const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+  const url = `${API_BASE_URL}/headteacher/teachers/bulk-template/`;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      ...(token && { Authorization: `Token ${token}` }),
+    },
+  });
+
+  if (!response.ok) {
+    const contentType = response.headers.get('content-type');
+    const isJson = contentType?.includes('application/json');
+    const data = isJson ? await response.json() : await response.text();
+
+    const errorMessage =
+      isJson && data?.message
+        ? data.message
+        : isJson && data?.error
+        ? data.error
+        : isJson && data?.detail
+        ? data.detail
+        : `Request failed with status ${response.status}`;
+
+    throw new ApiClientError(errorMessage, response.status);
+  }
+
+  return await response.blob();
+}
+
 export async function bulkCreateTeachers(file: File): Promise<BulkUploadTeacherResponse> {
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
   if (!API_BASE_URL) {
@@ -246,6 +307,47 @@ export async function bulkCreateTeachers(file: File): Promise<BulkUploadTeacherR
 
   const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
   const url = `${API_BASE_URL}/content/teachers/bulk-create/`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      ...(token && { Authorization: `Token ${token}` }),
+    },
+    body: formData,
+  });
+
+  const contentType = response.headers.get('content-type');
+  const isJson = contentType?.includes('application/json');
+  const data = isJson ? await response.json() : await response.text();
+
+  if (!response.ok) {
+    const errorMessage =
+      isJson && data?.message
+        ? data.message
+        : isJson && data?.error
+        ? data.error
+        : isJson && data?.detail
+        ? data.detail
+        : `Request failed with status ${response.status}`;
+
+    const errors = isJson && data?.errors ? data.errors : undefined;
+    throw new ApiClientError(errorMessage, response.status, errors);
+  }
+
+  return data as BulkUploadTeacherResponse;
+}
+
+export async function bulkCreateHeadTeacherTeachers(file: File): Promise<BulkUploadTeacherResponse> {
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (!API_BASE_URL) {
+    throw new ApiClientError('API base URL is not configured', 0);
+  }
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+  const url = `${API_BASE_URL}/headteacher/teachers/bulk-create/`;
 
   const response = await fetch(url, {
     method: 'POST',
@@ -314,6 +416,17 @@ export async function getTeacherStudents(): Promise<TeacherStudent[]> {
   return await apiRequest<TeacherStudent[]>('/teacher/students/');
 }
 
+export interface HeadTeacherStudent extends TeacherStudent {
+  points: number;
+  current_login_streak: number;
+  max_login_streak: number;
+  last_login_activity_date: string | null;
+}
+
+export async function getHeadTeacherStudents(): Promise<HeadTeacherStudent[]> {
+  return await apiRequest<HeadTeacherStudent[]>('/headteacher/students/');
+}
+
 export interface CreateStudentRequest {
   name: string;
   phone: string;
@@ -321,6 +434,7 @@ export interface CreateStudentRequest {
   grade: string;
   gender: string;
   dob: string;
+  school_id?: number;
   status?: string; // Optional, but we'll set it to "APPROVED" when teacher creates
 }
 
@@ -440,6 +554,13 @@ export async function createTeacherStudent(payload: CreateStudentRequest): Promi
   }
 }
 
+export async function createHeadTeacherStudent(payload: CreateStudentRequest): Promise<CreateStudentResponse> {
+  return await apiRequest<CreateStudentResponse>('/headteacher/students/create/', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export interface BulkUploadResult {
   row?: number;
   status: string;
@@ -496,6 +617,42 @@ export async function downloadBulkTemplate(): Promise<Blob> {
   return await response.blob();
 }
 
+export async function downloadHeadTeacherBulkTemplate(): Promise<Blob> {
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (!API_BASE_URL) {
+    throw new ApiClientError('API base URL is not configured', 0);
+  }
+
+  const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+  const url = `${API_BASE_URL}/headteacher/students/bulk-template/`;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      ...(token && { Authorization: `Token ${token}` }),
+    },
+  });
+
+  if (!response.ok) {
+    const contentType = response.headers.get('content-type');
+    const isJson = contentType?.includes('application/json');
+    const data = isJson ? await response.json() : await response.text();
+
+    const errorMessage =
+      isJson && data?.message
+        ? data.message
+        : isJson && data?.error
+        ? data.error
+        : isJson && data?.detail
+        ? data.detail
+        : `Request failed with status ${response.status}`;
+
+    throw new ApiClientError(errorMessage, response.status);
+  }
+
+  return await response.blob();
+}
+
 export async function bulkCreateStudents(file: File): Promise<BulkUploadResponse> {
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
   if (!API_BASE_URL) {
@@ -507,6 +664,47 @@ export async function bulkCreateStudents(file: File): Promise<BulkUploadResponse
 
   const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
   const url = `${API_BASE_URL}/teacher/students/bulk-create/`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      ...(token && { Authorization: `Token ${token}` }),
+    },
+    body: formData,
+  });
+
+  const contentType = response.headers.get('content-type');
+  const isJson = contentType?.includes('application/json');
+  const data = isJson ? await response.json() : await response.text();
+
+  if (!response.ok) {
+    const errorMessage =
+      isJson && data?.message
+        ? data.message
+        : isJson && data?.error
+        ? data.error
+        : isJson && data?.detail
+        ? data.detail
+        : `Request failed with status ${response.status}`;
+
+    const errors = isJson && data?.errors ? data.errors : undefined;
+    throw new ApiClientError(errorMessage, response.status, errors);
+  }
+
+  return data as BulkUploadResponse;
+}
+
+export async function bulkCreateHeadTeacherStudents(file: File): Promise<BulkUploadResponse> {
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (!API_BASE_URL) {
+    throw new ApiClientError('API base URL is not configured', 0);
+  }
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+  const url = `${API_BASE_URL}/headteacher/students/bulk-create/`;
 
   const response = await fetch(url, {
     method: 'POST',
@@ -559,6 +757,10 @@ export async function getTeacherGrades(): Promise<TeacherGrades> {
   return await apiRequest<TeacherGrades>('/teacher/grades/');
 }
 
+export async function getHeadTeacherGrades(): Promise<TeacherGrades> {
+  return await apiRequest<TeacherGrades>('/headteacher/grades/');
+}
+
 export interface TeacherSubmissions {
   submissions: {
     child_name: string;
@@ -583,6 +785,43 @@ export async function getTeacherSubmissions(): Promise<TeacherSubmissions> {
   return await apiRequest<TeacherSubmissions>('/teacher/submissions/');
 }
 
+export async function getHeadTeacherSubmissions(): Promise<TeacherSubmissions> {
+  return await apiRequest<TeacherSubmissions>('/headteacher/submissions/');
+}
+
+export interface HeadTeacherLeaderboard {
+  scope: {
+    kind: string;
+    timeframe: string;
+    school_id: number;
+    school_name: string;
+    grades: string[];
+    grade: string;
+    county_id: number;
+    district_id: number;
+  };
+  total_students: number;
+  leaderboard: {
+    rank: number;
+    student_db_id: number;
+    student_id: string;
+    student_name: string;
+    grade: string;
+    points: number;
+    current_login_streak: number;
+    school_id: number;
+    school_name: string;
+    district_id: number;
+    district_name: string;
+    county_id: number;
+    county_name: string;
+  }[];
+}
+
+export async function getHeadTeacherLeaderboard(): Promise<HeadTeacherLeaderboard> {
+  return await apiRequest<HeadTeacherLeaderboard>('/headteacher/leaderboard/');
+}
+
 export interface TeacherTopic {
   id: number;
   subject: number;
@@ -598,6 +837,10 @@ export async function getTeacherTopics(): Promise<TeacherTopic[]> {
 
 export async function getTeacherSubjects(): Promise<TeacherSubject[]> {
   return await apiRequest<TeacherSubject[]>('/teacher/subjects/');
+}
+
+export async function getHeadTeacherSubjects(): Promise<TeacherSubject[]> {
+  return await apiRequest<TeacherSubject[]>('/headteacher/subjects/');
 }
 
 export interface TeacherLesson {
@@ -622,15 +865,47 @@ export async function getTeacherLessons(): Promise<TeacherLesson[]> {
   return await apiRequest<TeacherLesson[]>('/teacher/lessons/');
 }
 
+export async function getHeadTeacherLessons(): Promise<TeacherLesson[]> {
+  return await apiRequest<TeacherLesson[]>('/headteacher/lessons/');
+}
+
+export interface UnlockLessonRequest {
+  student_id: number;
+  lesson_id: number;
+  duration_hours: number;
+  reason: string;
+}
+
+export interface UnlockLessonResponse {
+  id: number;
+  student_id: number;
+  lesson_id: number;
+  unlocked_by_id: number;
+  reason: string;
+  expires_at: string | null;
+  revoked_at: string | null;
+}
+
+export async function unlockLessonForStudent(payload: UnlockLessonRequest): Promise<UnlockLessonResponse> {
+  return await apiRequest<UnlockLessonResponse>('/teacher/unlock-lesson/', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export interface TeacherLessonAssessment {
   id: number;
   lesson: number;
-  type: "QUIZ" | "ASSIGNMENT";
+  type: "QUIZ" | "ASSIGNMENT" | "TRIAL";
   given_by: number;
   title: string;
+  grade?: string;
   instructions: string;
   marks: number;
   due_at: string;
+  ai_recommended?: boolean;
+  is_targeted?: boolean;
+  target_student?: number | null;
   status: string;
   moderation_comment: string;
   created_at: string;
@@ -639,6 +914,10 @@ export interface TeacherLessonAssessment {
 
 export async function getTeacherLessonAssessments(): Promise<TeacherLessonAssessment[]> {
   return await apiRequest<TeacherLessonAssessment[]>('/teacher/lesson-assessments/');
+}
+
+export async function getHeadTeacherLessonAssessments(): Promise<TeacherLessonAssessment[]> {
+  return await apiRequest<TeacherLessonAssessment[]>('/headteacher/lesson-assessments/');
 }
 
 export interface CreateLessonAssessmentRequest {
@@ -707,7 +986,10 @@ export interface CreateLessonResponse {
   updated_at: string;
 }
 
-export async function createTeacherLesson(payload: CreateLessonRequest): Promise<CreateLessonResponse> {
+async function createLessonAtEndpoint(
+  endpoint: string,
+  payload: CreateLessonRequest
+): Promise<CreateLessonResponse> {
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
   if (!API_BASE_URL) {
     throw new Error('API base URL is not configured');
@@ -740,7 +1022,7 @@ export async function createTeacherLesson(payload: CreateLessonRequest): Promise
     }
 
     const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-    const response = await fetch(`${API_BASE_URL}/teacher/lessons/create/`, {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       method: 'POST',
       headers: {
         ...(token && { Authorization: `Token ${token}` }),
@@ -767,10 +1049,18 @@ export async function createTeacherLesson(payload: CreateLessonRequest): Promise
     return data as CreateLessonResponse;
   }
 
-  return await apiRequest<CreateLessonResponse>('/teacher/lessons/create/', {
+  return await apiRequest<CreateLessonResponse>(endpoint, {
     method: 'POST',
     body: JSON.stringify(payload),
   });
+}
+
+export async function createTeacherLesson(payload: CreateLessonRequest): Promise<CreateLessonResponse> {
+  return createLessonAtEndpoint('/teacher/lessons/create/', payload);
+}
+
+export async function createHeadTeacherLesson(payload: CreateLessonRequest): Promise<CreateLessonResponse> {
+  return createLessonAtEndpoint('/headteacher/lessons/create/', payload);
 }
 
 export interface SubjectOption {
@@ -1018,6 +1308,18 @@ export async function approveStudent(studentId: number): Promise<TeacherStudent>
 
 export async function rejectStudent(studentId: number): Promise<TeacherStudent> {
   return await apiRequest<TeacherStudent>(`/teacher/${studentId}/reject-student/`, {
+    method: 'POST',
+  });
+}
+
+export async function approveHeadTeacherStudent(studentId: number): Promise<HeadTeacherStudent> {
+  return await apiRequest<HeadTeacherStudent>(`/headteacher/${studentId}/approve-student/`, {
+    method: 'POST',
+  });
+}
+
+export async function rejectHeadTeacherStudent(studentId: number): Promise<HeadTeacherStudent> {
+  return await apiRequest<HeadTeacherStudent>(`/headteacher/${studentId}/reject-student/`, {
     method: 'POST',
   });
 }

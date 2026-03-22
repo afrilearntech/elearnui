@@ -183,6 +183,18 @@ function getMediaTabEmptyMessage(tab: SubjectMediaTab): string {
 }
 
 function getLessonProgressState(lesson: any) {
+  const unlockExpiresAt =
+    lesson.manual_unlock_expires_at ||
+    lesson.unlock_expires_at ||
+    lesson.unlocked_expires_at ||
+    lesson.expires_at ||
+    null;
+
+  const hasTeacherUnlockMarker =
+    Boolean(unlockExpiresAt) ||
+    Boolean(lesson.unlocked_by_id) ||
+    (typeof lesson.lock_reason === 'string' && /teacher|temporary|unlocked/i.test(lesson.lock_reason));
+
   const isCompleted =
     Boolean(lesson.is_completed) ||
     lesson.progression_status === 'completed' ||
@@ -194,14 +206,30 @@ function getLessonProgressState(lesson: any) {
     !lesson.is_locked;
 
   const isLocked = !isAvailable;
+  const isTeacherUnlocked = !isCompleted && isAvailable && hasTeacherUnlockMarker;
+
+  const lockReason =
+    lesson.lock_reason ||
+    'Finish the current lesson first to unlock this one.';
+
+  const availabilityReason = isTeacherUnlocked
+    ? unlockExpiresAt
+      ? `Opened by your teacher until ${new Date(unlockExpiresAt).toLocaleString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        })}.`
+      : 'Opened by your teacher for extra practice.'
+    : '';
 
   return {
     isCompleted,
     isAvailable,
     isLocked,
-    lockReason:
-      lesson.lock_reason ||
-      'Finish the current lesson first to unlock this one.',
+    isTeacherUnlocked,
+    lockReason,
+    availabilityReason,
   };
 }
 
@@ -243,23 +271,13 @@ export default function SubjectsLessonsPage() {
         
         // Use lessons directly from the API response (they already have subject_name, subject_id, resource_type, etc.)
         const lessonsData = (data.lessons || []).map(lesson => ({
+          ...lesson,
           id: lesson.id,
           title: lesson.title,
           subject_id: lesson.subject_id,
           subject_name: lesson.subject_name || `Subject ${lesson.subject_id}`,
           type: lesson.resource_type || 'VIDEO', // Use resource_type from API
           resource_type: lesson.resource_type || 'VIDEO',
-          thumbnail: lesson.thumbnail,
-          resource: lesson.resource,
-          grade: lesson.grade,
-          status: lesson.status,
-          progression_status: lesson.progression_status,
-          is_locked: lesson.is_locked,
-          is_completed: lesson.is_completed,
-          lock_reason: lesson.lock_reason,
-          sequence_position: lesson.sequence_position,
-          period_name: lesson.period_name,
-          next_video_id: lesson.next_video_id,
         }));
         
         setSubjects(subjectsData);
@@ -535,6 +553,15 @@ export default function SubjectsLessonsPage() {
                           </span>
                         </div>
 
+                        {progressState.isTeacherUnlocked && (
+                          <div className="absolute bottom-2 left-2 px-2.5 py-1 rounded-lg bg-indigo-600/95 text-white flex items-center gap-1.5 shadow-md">
+                            <Icon icon="mdi:account-check-outline" width={13} height={13} />
+                            <span className="text-[10px] font-semibold" style={{ fontFamily: 'Andika, sans-serif' }}>
+                              Teacher Opened
+                            </span>
+                          </div>
+                        )}
+
                         <div className="absolute inset-0 flex items-center justify-center">
                           <div className={`w-12 h-12 ${typeInfo.bgColor} rounded-full flex items-center justify-center shadow-lg border-2 ${typeInfo.borderColor}`}>
                             <Icon icon={progressState.isLocked ? 'mdi:lock' : typeInfo.icon} width={22} height={22} className={progressState.isLocked ? 'text-gray-500' : typeInfo.color.replace('bg-', 'text-')} />
@@ -551,7 +578,7 @@ export default function SubjectsLessonsPage() {
                                 </span>
                               </div>
                               <p className="text-[10px] leading-4 text-white/95 line-clamp-2" style={{ fontFamily: 'Andika, sans-serif' }}>
-                                Finish the current lesson to unlock this one.
+                                {progressState.lockReason}
                               </p>
                             </div>
                           </div> 
@@ -566,6 +593,8 @@ export default function SubjectsLessonsPage() {
                             ? progressState.lockReason
                             : progressState.isCompleted
                             ? 'Great job! You already completed this lesson.'
+                            : progressState.isTeacherUnlocked
+                            ? progressState.availabilityReason
                             : `${typeInfo.action} this lesson to unlock the next one.`}
                         </p>
                         <div className="flex items-center justify-between">

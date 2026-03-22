@@ -179,3 +179,55 @@ export async function changePassword(
   });
 }
 
+export interface UserProfileSchool {
+  id: number;
+  name: string;
+  district_id: number;
+  district_name: string;
+  county_id: number;
+  county_name: string;
+}
+
+export interface UserProfileUser {
+  id: number;
+  name: string;
+  phone: string;
+  email: string;
+  dob: string | null;
+  gender: string | null;
+  role: string;
+}
+
+export interface UserProfileStudent {
+  id: number;
+  grade: string | null;
+  points: number;
+  current_login_streak: number;
+  max_login_streak: number;
+  last_login_activity_date: string | null;
+  school: UserProfileSchool | null;
+  status: string;
+}
+
+export interface UserProfileTeacher {
+  id: number;
+  school_id: number | null;
+  school: UserProfileSchool | null;
+  status: string;
+}
+
+export interface UserProfileResponse {
+  user: UserProfileUser;
+  student?: UserProfileStudent | null;
+  teacher?: UserProfileTeacher | null;
+}
+
+export async function getUserProfile(token: string): Promise<UserProfileResponse> {
+  return apiRequest<UserProfileResponse>('/auth/userprofile/', {
+    method: 'GET',
+    headers: {
+      'Authorization': `Token ${token}`,
+    },
+  });
+}
+

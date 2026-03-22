@@ -19,6 +19,11 @@ export default function Navbar({ onMenuClick, userRole, onLinkChild }: NavbarPro
   const currentTitle = React.useMemo(() => {
     if (!pathname) return "";
     if (pathname === "/parent-teacher" || pathname === "/parent-teacher/dashboard") return "Dashboard";
+    if (pathname.startsWith("/parent-teacher/dashboard/headteacher/leaderboard")) return "School Leaderboard";
+    if (pathname.startsWith("/parent-teacher/dashboard/headteacher/teachers")) return "School Teachers";
+    if (pathname.startsWith("/parent-teacher/dashboard/headteacher/students")) return "School Students";
+    if (pathname.startsWith("/parent-teacher/dashboard/headteacher")) return "Head Teacher Dashboard";
+    if (pathname.startsWith("/parent-teacher/dashboard/teacher")) return "Teacher Dashboard";
     if (pathname.startsWith("/parent-teacher/dashboard/children")) return "My Children";
     if (pathname.startsWith("/parent-teacher/dashboard/grades")) return "Grades";
     if (pathname.startsWith("/parent-teacher/dashboard/assessments")) return "Assessments";

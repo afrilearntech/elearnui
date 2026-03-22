@@ -85,8 +85,13 @@ export default function RoleLoginForm({ role }: { role: ParentTeacherRole }) {
 
       showSuccessToast(`Welcome back, ${response.user.name}! Redirecting to your dashboard...`);
 
+      const resolvedRedirectPath =
+        role === "teacher" && response.user.role === "HEADTEACHER"
+          ? "/parent-teacher/dashboard/headteacher"
+          : config.redirectPath;
+
       setTimeout(() => {
-        router.push(config.redirectPath);
+        router.push(resolvedRedirectPath);
       }, 500);
     } catch (error: unknown) {
       let errorMessage = "An unexpected error occurred. Please try again.";

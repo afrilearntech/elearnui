@@ -24,12 +24,22 @@ const parentNavItems: NavItem[] = [
 const teacherNavItems: NavItem[] = [
   { href: "/parent-teacher/dashboard/teacher", label: "Dashboard", icon: "solar:widget-5-bold" },
   { href: "/parent-teacher/dashboard/teacher/class", label: "My Class", icon: "solar:users-group-two-rounded-bold" },
-  { href: "/parent-teacher/dashboard/teacher/teachers", label: "Teachers", icon: "solar:user-bold" },
   { href: "/parent-teacher/dashboard/teacher/subjects", label: "Subjects", icon: "solar:book-bold" },
   { href: "/parent-teacher/dashboard/teacher/lessons", label: "Lessons", icon: "solar:book-bookmark-bold" },
-  { href: "/parent-teacher/dashboard/teacher/assignments", label: "Assignments", icon: "solar:document-add-bold" },
-  { href: "/parent-teacher/dashboard/teacher/quizzes", label: "Quizzes", icon: "solar:clipboard-list-bold" },
+  { href: "/parent-teacher/dashboard/teacher/assignments", label: "Assessments", icon: "solar:document-add-bold" },
   { href: "/parent-teacher/dashboard/teacher/assessments", label: "General Assessment", icon: "solar:document-text-bold" },
+  { href: "/parent-teacher/dashboard/teacher/grades", label: "Grades", icon: "solar:diploma-verified-bold" },
+  { href: "/parent-teacher/dashboard/teacher/submissions", label: "Submissions", icon: "solar:file-check-bold" },
+];
+
+const headTeacherNavItems: NavItem[] = [
+  { href: "/parent-teacher/dashboard/headteacher", label: "Dashboard", icon: "solar:widget-5-bold" },
+  { href: "/parent-teacher/dashboard/headteacher/students", label: "Students", icon: "solar:users-group-two-rounded-bold" },
+  { href: "/parent-teacher/dashboard/headteacher/teachers", label: "Teachers", icon: "solar:user-bold" },
+  { href: "/parent-teacher/dashboard/headteacher/leaderboard", label: "Leaderboard", icon: "solar:cup-star-bold" },
+  { href: "/parent-teacher/dashboard/teacher/subjects", label: "Subjects", icon: "solar:book-bold" },
+  { href: "/parent-teacher/dashboard/teacher/lessons", label: "Lessons", icon: "solar:book-bookmark-bold" },
+  { href: "/parent-teacher/dashboard/teacher/assignments", label: "Assessments", icon: "solar:document-add-bold" },
   { href: "/parent-teacher/dashboard/teacher/grades", label: "Grades", icon: "solar:diploma-verified-bold" },
   { href: "/parent-teacher/dashboard/teacher/submissions", label: "Submissions", icon: "solar:file-check-bold" },
 ];
@@ -41,6 +51,10 @@ function isActivePath(pathname: string, href: string) {
 
   if (href === "/parent-teacher/dashboard/teacher") {
     return pathname === "/parent-teacher/dashboard/teacher";
+  }
+
+  if (href === "/parent-teacher/dashboard/headteacher") {
+    return pathname === "/parent-teacher/dashboard/headteacher";
   }
 
   return pathname === href || pathname.startsWith(`${href}/`);
@@ -57,7 +71,9 @@ export default function Sidebar({ mobileOpen = false, onClose, userName = "Paren
   const pathname = usePathname();
   const router = useRouter();
   const isTeacher = userRole === "Teacher";
-  const navItems = isTeacher ? teacherNavItems : parentNavItems;
+  const isHeadTeacher = userRole === "Head Teacher";
+  const isTeacherOrHeadTeacher = isTeacher || isHeadTeacher;
+  const navItems = isHeadTeacher ? headTeacherNavItems : isTeacher ? teacherNavItems : parentNavItems;
 
   const handleLogout = () => {
     if (typeof window !== "undefined") {
@@ -106,7 +122,7 @@ export default function Sidebar({ mobileOpen = false, onClose, userName = "Paren
 
           <div className="mt-auto p-3 space-y-3 flex-shrink-0 border-t border-gray-100 bg-white">
             <Link
-              href={isTeacher ? "/parent-teacher/dashboard/teacher/profile" : "/parent-teacher/dashboard/profile"}
+              href={isTeacherOrHeadTeacher ? "/parent-teacher/dashboard/teacher/profile" : "/parent-teacher/dashboard/profile"}
               className="rounded-lg bg-white border border-gray-200 shadow-sm p-4 hover:bg-gray-50 transition-colors cursor-pointer block"
             >
               <div className="font-semibold text-gray-900 text-sm mb-2">{userName}</div>
@@ -159,7 +175,7 @@ export default function Sidebar({ mobileOpen = false, onClose, userName = "Paren
               </div>
               <div className="mt-auto p-3 space-y-3 flex-shrink-0 border-t border-gray-100 bg-white">
                 <Link
-                  href={isTeacher ? "/parent-teacher/dashboard/teacher/profile" : "/parent-teacher/dashboard/profile"}
+                  href={isTeacherOrHeadTeacher ? "/parent-teacher/dashboard/teacher/profile" : "/parent-teacher/dashboard/profile"}
                   onClick={onClose}
                   className="rounded-lg bg-white border border-gray-200 shadow-sm p-4 hover:bg-gray-50 transition-colors cursor-pointer block"
                 >

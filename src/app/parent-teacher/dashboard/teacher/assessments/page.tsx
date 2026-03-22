@@ -12,7 +12,7 @@ interface Assessment {
   id: number;
   title: string;
   grade: string;
-  type: "QUIZ" | "ASSIGNMENT";
+  type: "QUIZ" | "ASSIGNMENT" | "TRIAL";
   dueDate: string;
   maxScore: number;
   status: string;
@@ -20,12 +20,14 @@ interface Assessment {
 }
 
 
-const getTypeColor = (type: "QUIZ" | "ASSIGNMENT") => {
+const getTypeColor = (type: "QUIZ" | "ASSIGNMENT" | "TRIAL") => {
   switch (type) {
     case "QUIZ":
       return "bg-purple-100 text-purple-800 border-purple-200";
     case "ASSIGNMENT":
       return "bg-blue-100 text-blue-800 border-blue-200";
+    case "TRIAL":
+      return "bg-indigo-100 text-indigo-800 border-indigo-200";
     default:
       return "bg-gray-100 text-gray-800 border-gray-200";
   }
@@ -260,7 +262,11 @@ export default function TeacherAssessmentsPage() {
                             assessment.type
                           )}`}
                         >
-                          {assessment.type === "QUIZ" ? "Quiz" : "Assignment"}
+                          {assessment.type === "QUIZ"
+                            ? "Quiz"
+                            : assessment.type === "ASSIGNMENT"
+                              ? "Assignment"
+                              : "Trial"}
                         </span>
                       </div>
                       <div className="text-sm font-medium text-gray-900 hidden md:block">
@@ -299,7 +305,11 @@ export default function TeacherAssessmentsPage() {
                               assessment.type
                             )}`}
                           >
-                            {assessment.type === "QUIZ" ? "Quiz" : "Assignment"}
+                            {assessment.type === "QUIZ"
+                              ? "Quiz"
+                              : assessment.type === "ASSIGNMENT"
+                                ? "Assignment"
+                                : "Trial"}
                           </span>
                         </div>
                         <div className="flex items-center justify-between text-xs">

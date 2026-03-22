@@ -14,11 +14,51 @@ const andika = Andika({
   variable: "--font-andika",
 });
 
+const siteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL ||
+  process.env.NEXT_PUBLIC_APP_URL ||
+  "https://digitallearning.moe.gov.lr";
+const logoPath = "/moe.png";
+const logoUrl = `${siteUrl}${logoPath}`;
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: "MOE - ELEARN",
   description: "For students",
+  applicationName: "MOE - ELEARN",
+  alternates: {
+    canonical: siteUrl,
+  },
+  manifest: "/manifest.webmanifest",
   icons: {
-    icon: '/moe.png',
+    icon: [
+      { url: logoPath, type: "image/png", sizes: "128x128" },
+      { url: logoPath, rel: "icon" },
+    ],
+    shortcut: [{ url: logoPath, type: "image/png" }],
+    apple: [{ url: logoPath, type: "image/png", sizes: "128x128" }],
+  },
+  openGraph: {
+    title: "MOE - ELEARN",
+    description: "For students",
+    url: siteUrl,
+    siteName: "MOE - ELEARN",
+    locale: "en_US",
+    images: [
+      {
+        url: logoUrl,
+        width: 1200,
+        height: 630,
+        alt: "Ministry of Education Liberia - eLearn",
+      },
+    ],
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "MOE - ELEARN",
+    description: "For students",
+    images: [logoUrl],
   },
 };
 

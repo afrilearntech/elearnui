@@ -2,7 +2,14 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Icon } from "@iconify/react";
-import { createTeacherLesson, getSubjectsForSelect, getTeacherTopics, SubjectOption, TeacherTopic } from "@/lib/api/parent-teacher/teacher";
+import {
+  createTeacherLesson,
+  createHeadTeacherLesson,
+  getSubjectsForSelect,
+  getTeacherTopics,
+  SubjectOption,
+  TeacherTopic,
+} from "@/lib/api/parent-teacher/teacher";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
 
 const LESSON_TYPES = ["VIDEO", "AUDIO", "PDF", "PPT", "DOC"];
@@ -171,7 +178,18 @@ export default function CreateLessonModal({ isOpen, onClose, onSuccess }: Create
 
     setIsSubmitting(true);
     try {
-      await createTeacherLesson({
+      const userStr = localStorage.getItem("user");
+      let isHeadTeacher = false;
+      if (userStr) {
+        try {
+          const user = JSON.parse(userStr);
+          isHeadTeacher = user?.role === "HEADTEACHER";
+        } catch {
+          isHeadTeacher = false;
+        }
+      }
+
+      const payload = {
         subject: Number(subjectId),
         topic: Number(topicId),
         period: Number(period) || 1,
@@ -183,7 +201,13 @@ export default function CreateLessonModal({ isOpen, onClose, onSuccess }: Create
         thumbnail: thumbnailFile || null,
         moderation_comment: "",
         duration_minutes: Number(duration),
-      });
+      };
+
+      if (isHeadTeacher) {
+        await createHeadTeacherLesson(payload);
+      } else {
+        await createTeacherLesson(payload);
+      }
 
       showSuccessToast("Lesson created successfully! It will be reviewed and approved.");
       resetForm();

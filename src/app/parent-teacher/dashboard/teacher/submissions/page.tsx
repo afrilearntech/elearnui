@@ -5,6 +5,7 @@ import DashboardLayout from "@/components/parent-teacher/layout/DashboardLayout"
 import { Icon } from "@iconify/react";
 import { 
   getTeacherSubmissions, 
+  getHeadTeacherSubmissions,
   TeacherSubmissions,
   gradeGeneralAssessment,
   gradeLessonAssessment,
@@ -66,6 +67,7 @@ const formatDateTime = (dateString: string) => {
 
 export default function TeacherSubmissionsPage() {
   const [submissionsData, setSubmissionsData] = useState<TeacherSubmissions | null>(null);
+  const [isHeadTeacher, setIsHeadTeacher] = useState(false);
   const [students, setStudents] = useState<TeacherStudent[]>([]);
   const [generalAssessments, setGeneralAssessments] = useState<GeneralAssessment[]>([]);
   const [lessonAssessments, setLessonAssessments] = useState<TeacherLessonAssessment[]>([]);
@@ -87,16 +89,38 @@ export default function TeacherSubmissionsPage() {
     const fetchData = async () => {
       try {
         setIsLoading(true);
-        const [submissionsData, studentsData, generalAssessmentsData, lessonAssessmentsData] = await Promise.all([
-          getTeacherSubmissions(),
-          getTeacherStudents(),
-          getGeneralAssessments(),
-          getTeacherLessonAssessments(),
-        ]);
-        setSubmissionsData(submissionsData);
-        setStudents(studentsData);
-        setGeneralAssessments(generalAssessmentsData);
-        setLessonAssessments(lessonAssessmentsData);
+        const userRaw =
+          typeof window !== "undefined" ? localStorage.getItem("user") : null;
+        let headTeacher = false;
+        if (userRaw) {
+          try {
+            const parsedUser = JSON.parse(userRaw);
+            headTeacher = parsedUser?.role === "HEADTEACHER";
+          } catch {
+            headTeacher = false;
+          }
+        }
+
+        setIsHeadTeacher(headTeacher);
+
+        if (headTeacher) {
+          const data = await getHeadTeacherSubmissions();
+          setSubmissionsData(data);
+          setStudents([]);
+          setGeneralAssessments([]);
+          setLessonAssessments([]);
+        } else {
+          const [submissionsData, studentsData, generalAssessmentsData, lessonAssessmentsData] = await Promise.all([
+            getTeacherSubmissions(),
+            getTeacherStudents(),
+            getGeneralAssessments(),
+            getTeacherLessonAssessments(),
+          ]);
+          setSubmissionsData(submissionsData);
+          setStudents(studentsData);
+          setGeneralAssessments(generalAssessmentsData);
+          setLessonAssessments(lessonAssessmentsData);
+        }
       } catch (error) {
         console.error("Error fetching data:", error);
         showErrorToast("Failed to load data. Please try again.");
@@ -177,10 +201,12 @@ export default function TeacherSubmissionsPage() {
   const start = (currentPage - 1) * pageSize;
   const pagedSubmissions = filteredSubmissions.slice(start, start + pageSize);
 
+
   const handlePageChange = (newPage: number) => {
     setPage(newPage);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
+
 
   const handleOpenGrading = (submission: Submission) => {
     setGradingModal({ isOpen: true, submission });
@@ -189,6 +215,10 @@ export default function TeacherSubmissionsPage() {
 
   const handleGradeSubmission = async () => {
     if (!gradingModal.submission) return;
+    if (isHeadTeacher) {
+      showErrorToast("Head Teacher grading is not enabled on this page yet.");
+      return;
+    }
 
     const score = parseFloat(gradeScore);
     if (isNaN(score) || score < 0 || score > gradingModal.submission.maxScore) {
@@ -258,7 +288,9 @@ export default function TeacherSubmissionsPage() {
       showSuccessToast("Submission graded successfully!");
       
       // Refresh submissions
-      const updatedData = await getTeacherSubmissions();
+      const updatedData = isHeadTeacher
+        ? await getHeadTeacherSubmissions()
+        : await getTeacherSubmissions();
       setSubmissionsData(updatedData);
       
       setGradingModal({ isOpen: false, submission: null });
@@ -285,7 +317,9 @@ export default function TeacherSubmissionsPage() {
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Submissions</h1>
             <p className="text-gray-600 mt-1">
-              Review and grade student submissions
+              {isHeadTeacher
+                ? "Review school-wide student submissions"
+                : "Review and grade student submissions"}
             </p>
           </div>
         </div>
@@ -467,7 +501,7 @@ export default function TeacherSubmissionsPage() {
                         {formatDateTime(submission.submittedAt)}
                       </div>
                       <div className="md:text-right">
-                        {submission.status === "pending-review" ? (
+                        {submission.status === "pending-review" && !isHeadTeacher ? (
                           <button
                             onClick={() => handleOpenGrading(submission)}
                             className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors"
@@ -481,7 +515,7 @@ export default function TeacherSubmissionsPage() {
                             className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                           >
                             <Icon icon="solar:eye-bold" className="w-4 h-4" />
-                            View
+                            {isHeadTeacher ? "Review" : "View"}
                           </button>
                         )}
                       </div>
@@ -688,29 +722,31 @@ export default function TeacherSubmissionsPage() {
                 </div>
               )}
 
-              <div>
-                <label className="block text-sm font-medium text-gray-800 mb-2">
-                  {gradingModal.submission.status === "pending-review" ? "Enter Score" : "Update Score"} <span className="text-red-600">*</span>
-                </label>
-                <input
-                  type="number"
-                  value={gradeScore}
-                  onChange={(e) => setGradeScore(e.target.value)}
-                  placeholder="Enter score"
-                  min="0"
-                  max={gradingModal.submission.maxScore}
-                  step="0.5"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-gray-900 text-lg font-semibold"
-                />
-                <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
-                  <span>Maximum score: {gradingModal.submission.maxScore}</span>
-                  {gradeScore && !isNaN(parseFloat(gradeScore)) && (
-                    <span className="font-medium text-emerald-600">
-                      {Math.round((parseFloat(gradeScore) / gradingModal.submission.maxScore) * 100)}%
-                    </span>
-                  )}
+              {!isHeadTeacher && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-800 mb-2">
+                    {gradingModal.submission.status === "pending-review" ? "Enter Score" : "Update Score"} <span className="text-red-600">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    value={gradeScore}
+                    onChange={(e) => setGradeScore(e.target.value)}
+                    placeholder="Enter score"
+                    min="0"
+                    max={gradingModal.submission.maxScore}
+                    step="0.5"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-gray-900 text-lg font-semibold"
+                  />
+                  <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
+                    <span>Maximum score: {gradingModal.submission.maxScore}</span>
+                    {gradeScore && !isNaN(parseFloat(gradeScore)) && (
+                      <span className="font-medium text-emerald-600">
+                        {Math.round((parseFloat(gradeScore) / gradingModal.submission.maxScore) * 100)}%
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
             <div className="sticky bottom-0 bg-white border-t border-gray-200 p-6 flex gap-3 justify-end">
               <button
@@ -722,25 +758,27 @@ export default function TeacherSubmissionsPage() {
               >
                 Cancel
               </button>
-              <button
-                onClick={handleGradeSubmission}
-                disabled={
-                  isGrading ||
-                  !gradeScore ||
-                  parseFloat(gradeScore) < 0 ||
-                  parseFloat(gradeScore) > gradingModal.submission.maxScore
-                }
-                className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {isGrading ? (
-                  <span className="flex items-center gap-2">
-                    <Icon icon="solar:loading-bold" className="w-4 h-4 animate-spin" />
-                    Grading...
-                  </span>
-                ) : (
-                  gradingModal.submission.status === "pending-review" ? "Submit Grade" : "Update Grade"
-                )}
-              </button>
+              {!isHeadTeacher && (
+                <button
+                  onClick={handleGradeSubmission}
+                  disabled={
+                    isGrading ||
+                    !gradeScore ||
+                    parseFloat(gradeScore) < 0 ||
+                    parseFloat(gradeScore) > gradingModal.submission.maxScore
+                  }
+                  className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isGrading ? (
+                    <span className="flex items-center gap-2">
+                      <Icon icon="solar:loading-bold" className="w-4 h-4 animate-spin" />
+                      Grading...
+                    </span>
+                  ) : (
+                    gradingModal.submission.status === "pending-review" ? "Submit Grade" : "Update Grade"
+                  )}
+                </button>
+              )}
             </div>
           </div>
         </div>

@@ -2,19 +2,27 @@
 
 import { useState, useRef } from "react";
 import { Icon } from "@iconify/react";
-import { downloadBulkTemplate, bulkCreateStudents, BulkUploadResponse } from "@/lib/api/parent-teacher/teacher";
+import {
+  downloadBulkTemplate,
+  bulkCreateStudents,
+  downloadHeadTeacherBulkTemplate,
+  bulkCreateHeadTeacherStudents,
+  BulkUploadResponse,
+} from "@/lib/api/parent-teacher/teacher";
 import { showSuccessToast, showErrorToast } from "@/lib/toast";
 
 interface BulkUploadModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  roleMode?: "teacher" | "headteacher";
 }
 
 export default function BulkUploadModal({
   isOpen,
   onClose,
   onSuccess,
+  roleMode = "teacher",
 }: BulkUploadModalProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -26,7 +34,10 @@ export default function BulkUploadModal({
   const handleDownloadTemplate = async () => {
     try {
       setIsDownloading(true);
-      const blob = await downloadBulkTemplate();
+      const blob =
+        roleMode === "headteacher"
+          ? await downloadHeadTeacherBulkTemplate()
+          : await downloadBulkTemplate();
       
       // Create a download link
       const url = window.URL.createObjectURL(blob);
@@ -99,7 +110,10 @@ export default function BulkUploadModal({
 
     try {
       setIsUploading(true);
-      const result = await bulkCreateStudents(selectedFile);
+      const result =
+        roleMode === "headteacher"
+          ? await bulkCreateHeadTeacherStudents(selectedFile)
+          : await bulkCreateStudents(selectedFile);
       setUploadResult(result);
       
       if (result.summary.failed === 0) {

@@ -3,7 +3,11 @@
 import { useState, useEffect, useMemo } from "react";
 import DashboardLayout from "@/components/parent-teacher/layout/DashboardLayout";
 import { Icon } from "@iconify/react";
-import { getTeacherSubjects, TeacherSubject } from "@/lib/api/parent-teacher/teacher";
+import {
+  getTeacherSubjects,
+  getHeadTeacherSubjects,
+  TeacherSubject,
+} from "@/lib/api/parent-teacher/teacher";
 import { showErrorToast } from "@/lib/toast";
 
 const getStatusColor = (status: string) => {
@@ -186,7 +190,20 @@ export default function SubjectsPage() {
     const fetchSubjects = async () => {
       try {
         setIsLoading(true);
-        const data = await getTeacherSubjects();
+        const userStr = localStorage.getItem("user");
+        let isHeadTeacher = false;
+        if (userStr) {
+          try {
+            const user = JSON.parse(userStr);
+            isHeadTeacher = user?.role === "HEADTEACHER";
+          } catch {
+            isHeadTeacher = false;
+          }
+        }
+
+        const data = isHeadTeacher
+          ? await getHeadTeacherSubjects()
+          : await getTeacherSubjects();
         setSubjects(data);
       } catch (error) {
         console.error("Error fetching subjects:", error);

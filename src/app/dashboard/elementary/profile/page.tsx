@@ -6,7 +6,7 @@ import { Icon } from '@iconify/react';
 import ElementaryNavbar from '@/components/elementary/ElementaryNavbar';
 import ElementarySidebar from '@/components/elementary/ElementarySidebar';
 import StudentLoadingScreen from '@/components/ui/StudentLoadingScreen';
-import { changePassword, ChangePasswordRequest } from '@/lib/api/auth';
+import { changePassword, getUserProfile, UserProfileResponse } from '@/lib/api/auth';
 import { showErrorToast, showSuccessToast, formatErrorMessage } from '@/lib/toast';
 import { ApiClientError } from '@/lib/api/client';
 import Spinner from '@/components/ui/Spinner';
@@ -38,6 +38,7 @@ export default function ElementaryProfilePage() {
   const { isEnabled, announce } = useAccessibility();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [user, setUser] = useState<any>(null);
+  const [profileData, setProfileData] = useState<UserProfileResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showPasswordForm, setShowPasswordForm] = useState(false);
   const [passwordData, setPasswordData] = useState({
@@ -49,6 +50,11 @@ export default function ElementaryProfilePage() {
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const hasAnnouncedPageRef = useRef(false);
   const currentPasswordInputRef = useRef<HTMLInputElement | null>(null);
+  const resolvedSchool = profileData?.student?.school || profileData?.teacher?.school || null;
+  const resolvedSchoolName = resolvedSchool?.name || 'Not assigned';
+  const resolvedDistrictName = resolvedSchool?.district_name || 'Not assigned';
+  const resolvedCountyName = resolvedSchool?.county_name || 'Not assigned';
+  const resolvedGrade = profileData?.student?.grade || 'Not assigned';
 
   const resetPasswordForm = () => {
     setShowPasswordForm(false);
@@ -61,32 +67,63 @@ export default function ElementaryProfilePage() {
   };
 
   useEffect(() => {
-    const token = localStorage.getItem('auth_token');
-    if (!token) {
-      router.push('/login');
-      return;
-    }
+    let isMounted = true;
 
-    const storedUser = localStorage.getItem('user');
-    if (storedUser) {
-      try {
-        setUser(JSON.parse(storedUser));
-      } catch (e) {
-        console.error('Error parsing user data:', e);
-        showErrorToast('Failed to load user data.');
+    const fetchProfile = async () => {
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        router.push('/login');
+        return;
       }
-    }
-    setIsLoading(false);
+
+      let storedUserData: any = null;
+      const storedUser = localStorage.getItem('user');
+      if (storedUser) {
+        try {
+          storedUserData = JSON.parse(storedUser);
+          if (isMounted) {
+            setUser(storedUserData);
+          }
+        } catch (e) {
+          console.error('Error parsing user data:', e);
+        }
+      }
+
+      try {
+        const profile = await getUserProfile(token);
+        if (!isMounted) return;
+        setProfileData(profile);
+        setUser(profile.user || storedUserData);
+      } catch (error) {
+        if (!isMounted) return;
+        console.error('Error fetching user profile:', error);
+        if (!storedUserData) {
+          showErrorToast('Failed to load user profile data.');
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    fetchProfile();
+
+    return () => {
+      isMounted = false;
+    };
   }, [router]);
 
   useEffect(() => {
     if (!isEnabled || isLoading || !user || hasAnnouncedPageRef.current) return;
+    const announcedGrade = profileData?.student?.grade || 'Not assigned';
+    const announcedSchool = profileData?.student?.school?.name || profileData?.teacher?.school?.name || 'Not assigned';
     announce(
-      `Profile page loaded for ${user.name || 'student'}. Review your details, then open Change Password to update your password.`,
+      `Profile page loaded for ${user.name || 'student'}. Grade ${announcedGrade}, school ${announcedSchool}. Review your details, then open Change Password to update your password.`,
       'polite'
     );
     hasAnnouncedPageRef.current = true;
-  }, [isEnabled, isLoading, user, announce]);
+  }, [isEnabled, isLoading, user, profileData, announce]);
 
   useEffect(() => {
     if (!showPasswordForm) return;
@@ -285,6 +322,48 @@ export default function ElementaryProfilePage() {
                 </div>
 
                 <div className="p-6 sm:p-8 space-y-6">
+                  {/* School & Academic Information */}
+                  <div>
+                    <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2" style={{ fontFamily: 'Andika, sans-serif' }}>
+                      <Icon icon="material-symbols:school-outline" className="w-5 h-5 text-[#9333EA]" />
+                      School & Academic Information
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="bg-linear-to-r from-indigo-50 to-sky-50 rounded-xl p-4 border border-indigo-200">
+                        <p className="text-xs font-medium text-indigo-700 mb-1" style={{ fontFamily: 'Andika, sans-serif' }}>
+                          Grade
+                        </p>
+                        <p className="text-sm font-semibold text-gray-900" style={{ fontFamily: 'Andika, sans-serif' }}>
+                          {resolvedGrade}
+                        </p>
+                      </div>
+                      <div className="bg-linear-to-r from-emerald-50 to-teal-50 rounded-xl p-4 border border-emerald-200">
+                        <p className="text-xs font-medium text-emerald-700 mb-1" style={{ fontFamily: 'Andika, sans-serif' }}>
+                          School
+                        </p>
+                        <p className="text-sm font-semibold text-gray-900" style={{ fontFamily: 'Andika, sans-serif' }}>
+                          {resolvedSchoolName}
+                        </p>
+                      </div>
+                      <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+                        <p className="text-xs font-medium text-gray-600 mb-1" style={{ fontFamily: 'Andika, sans-serif' }}>
+                          District
+                        </p>
+                        <p className="text-sm font-semibold text-gray-900" style={{ fontFamily: 'Andika, sans-serif' }}>
+                          {resolvedDistrictName}
+                        </p>
+                      </div>
+                      <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+                        <p className="text-xs font-medium text-gray-600 mb-1" style={{ fontFamily: 'Andika, sans-serif' }}>
+                          County
+                        </p>
+                        <p className="text-sm font-semibold text-gray-900" style={{ fontFamily: 'Andika, sans-serif' }}>
+                          {resolvedCountyName}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Personal Information */}
                   <div>
                     <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2" style={{ fontFamily: 'Andika, sans-serif' }}>
@@ -349,14 +428,6 @@ export default function ElementaryProfilePage() {
                         }`}>
                           {user.is_active !== false ? "Active" : "Inactive"}
                         </span>
-                      </div>
-                      <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
-                        <p className="text-xs font-medium text-gray-600 mb-1" style={{ fontFamily: 'Andika, sans-serif' }}>
-                          User ID
-                        </p>
-                        <p className="text-sm font-semibold text-gray-900" style={{ fontFamily: 'Andika, sans-serif' }}>
-                          #{user.id || "N/A"}
-                        </p>
                       </div>
                     </div>
                   </div>

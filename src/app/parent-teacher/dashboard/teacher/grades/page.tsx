@@ -3,7 +3,11 @@
 import { useState, useMemo, useEffect } from "react";
 import DashboardLayout from "@/components/parent-teacher/layout/DashboardLayout";
 import { Icon } from "@iconify/react";
-import { getTeacherGrades, TeacherGrades } from "@/lib/api/parent-teacher/teacher";
+import {
+  getTeacherGrades,
+  getHeadTeacherGrades,
+  TeacherGrades,
+} from "@/lib/api/parent-teacher/teacher";
 import { showErrorToast } from "@/lib/toast";
 
 interface GradeRecord {
@@ -55,6 +59,7 @@ const formatDate = (dateString: string) => {
 
 export default function TeacherGradesPage() {
   const [gradesData, setGradesData] = useState<TeacherGrades | null>(null);
+  const [isHeadTeacher, setIsHeadTeacher] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [selectedStudent, setSelectedStudent] = useState<string>("All");
@@ -66,7 +71,23 @@ export default function TeacherGradesPage() {
     const fetchGrades = async () => {
       try {
         setIsLoading(true);
-        const data = await getTeacherGrades();
+        const userRaw =
+          typeof window !== "undefined" ? localStorage.getItem("user") : null;
+        let headTeacher = false;
+
+        if (userRaw) {
+          try {
+            const parsedUser = JSON.parse(userRaw);
+            headTeacher = parsedUser?.role === "HEADTEACHER";
+          } catch {
+            headTeacher = false;
+          }
+        }
+
+        setIsHeadTeacher(headTeacher);
+        const data = headTeacher
+          ? await getHeadTeacherGrades()
+          : await getTeacherGrades();
         setGradesData(data);
       } catch (error) {
         console.error("Error fetching grades:", error);
@@ -142,7 +163,9 @@ export default function TeacherGradesPage() {
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Student Grades</h1>
             <p className="text-gray-600 mt-1">
-              View and manage grades for all your students
+              {isHeadTeacher
+                ? "View school-wide student grades and performance distribution"
+                : "View and manage grades for all your students"}
             </p>
           </div>
         </div>

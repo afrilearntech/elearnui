@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { Icon } from "@iconify/react";
-import { createTeacherStudent, TeacherStudent } from "@/lib/api/parent-teacher/teacher";
+import { createTeacherStudent, createHeadTeacherStudent } from "@/lib/api/parent-teacher/teacher";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
 import { ApiClientError } from "@/lib/api/client";
 
@@ -10,6 +10,8 @@ interface AddStudentModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  roleMode?: "teacher" | "headteacher";
+  schoolId?: number | null;
 }
 
 const GRADE_OPTIONS = [
@@ -29,7 +31,13 @@ const GRADE_OPTIONS = [
 
 const GENDER_OPTIONS = ["MALE", "FEMALE"];
 
-export default function AddStudentModal({ isOpen, onClose, onSuccess }: AddStudentModalProps) {
+export default function AddStudentModal({
+  isOpen,
+  onClose,
+  onSuccess,
+  roleMode = "teacher",
+  schoolId = null,
+}: AddStudentModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
@@ -126,12 +134,22 @@ export default function AddStudentModal({ isOpen, onClose, onSuccess }: AddStude
         grade: formData.grade,
         gender: formData.gender,
         dob: dobValue, // Already in YYYY-MM-DD format from date input
-        status: "APPROVED", // Automatically approve students created by teachers
+        ...(roleMode === "teacher" || roleMode === "headteacher" ? { status: "APPROVED" } : {}),
+        ...(roleMode === "headteacher" && schoolId ? { school_id: schoolId } : {}),
       };
 
       console.log('Sending payload:', payload); // Debug log
 
-      await createTeacherStudent(payload);
+      if (roleMode === "headteacher") {
+        if (!schoolId) {
+          showErrorToast("School context not found. Please refresh and try again.");
+          setIsSubmitting(false);
+          return;
+        }
+        await createHeadTeacherStudent(payload);
+      } else {
+        await createTeacherStudent(payload);
+      }
 
       showSuccessToast("Student added successfully!");
       resetForm();

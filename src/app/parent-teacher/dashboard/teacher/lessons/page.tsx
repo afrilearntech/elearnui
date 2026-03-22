@@ -3,8 +3,18 @@
 import { useState, useEffect, useMemo } from "react";
 import DashboardLayout from "@/components/parent-teacher/layout/DashboardLayout";
 import { Icon } from "@iconify/react";
-import { getTeacherLessons, TeacherLesson, getTeacherSubjects, TeacherSubject } from "@/lib/api/parent-teacher/teacher";
-import { showErrorToast } from "@/lib/toast";
+import {
+  getTeacherLessons,
+  getHeadTeacherLessons,
+  TeacherLesson,
+  getTeacherSubjects,
+  getHeadTeacherSubjects,
+  TeacherSubject,
+  getTeacherStudents,
+  TeacherStudent,
+  unlockLessonForStudent,
+} from "@/lib/api/parent-teacher/teacher";
+import { showErrorToast, showSuccessToast } from "@/lib/toast";
 import CreateLessonModal from "@/components/parent-teacher/teacher/CreateLessonModal";
 
 const getStatusColor = (status: string) => {
@@ -227,9 +237,194 @@ function LessonDetailsModal({ lesson, isOpen, onClose }: LessonDetailsModalProps
   );
 }
 
+type TeacherLessonWithMeta = TeacherLesson & {
+  subjectName: string;
+  grade: string;
+};
+
+interface UnlockLessonModalProps {
+  isOpen: boolean;
+  lesson: TeacherLessonWithMeta | null;
+  students: TeacherStudent[];
+  isSubmitting: boolean;
+  onClose: () => void;
+  onSubmit: (payload: { studentId: number; durationHours: number; reason: string }) => Promise<void>;
+}
+
+function UnlockLessonModal({
+  isOpen,
+  lesson,
+  students,
+  isSubmitting,
+  onClose,
+  onSubmit,
+}: UnlockLessonModalProps) {
+  const [selectedStudentId, setSelectedStudentId] = useState<string>("");
+  const [durationHours, setDurationHours] = useState<number>(72);
+  const [reason, setReason] = useState("");
+
+  const eligibleStudents = useMemo(() => {
+    if (!lesson) return [];
+    const lessonGrade = lesson.grade?.toUpperCase();
+    const sameGradeStudents = students.filter(
+      (student) => student.grade?.toUpperCase() === lessonGrade && student.status === "APPROVED"
+    );
+    return sameGradeStudents.length > 0
+      ? sameGradeStudents
+      : students.filter((student) => student.status === "APPROVED");
+  }, [lesson, students]);
+
+  useEffect(() => {
+    if (!isOpen || !lesson) return;
+    setDurationHours(72);
+    setReason("");
+    setSelectedStudentId(eligibleStudents[0] ? String(eligibleStudents[0].id) : "");
+  }, [isOpen, lesson, eligibleStudents]);
+
+  if (!isOpen || !lesson) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl border border-gray-200">
+        <div className="border-b border-gray-200 p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-xl font-bold text-gray-900">Unlock Lesson for Student</h3>
+              <p className="text-sm text-gray-600 mt-1">
+                Open <span className="font-semibold text-gray-900">{lesson.title}</span> for a selected student.
+              </p>
+            </div>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-700 transition-colors" aria-label="Close unlock lesson modal">
+              <Icon icon="solar:close-circle-bold" className="w-6 h-6" />
+            </button>
+          </div>
+        </div>
+
+        <form
+          className="p-5 space-y-4"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            const studentId = Number(selectedStudentId);
+            if (!studentId) {
+              showErrorToast("Please select a student.");
+              return;
+            }
+            if (!Number.isFinite(durationHours) || durationHours <= 0) {
+              showErrorToast("Duration must be greater than 0 hours.");
+              return;
+            }
+            if (reason.trim().length < 3) {
+              showErrorToast("Please provide a short reason (at least 3 characters).");
+              return;
+            }
+            await onSubmit({
+              studentId,
+              durationHours,
+              reason: reason.trim(),
+            });
+          }}
+        >
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+            <div className="flex items-center gap-2 text-sm text-emerald-800">
+              <Icon icon="solar:info-circle-bold" className="w-4 h-4" />
+              Student sees this lesson as available until it expires.
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Student</label>
+            <select
+              value={selectedStudentId}
+              onChange={(e) => setSelectedStudentId(e.target.value)}
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+            >
+              {eligibleStudents.length === 0 ? (
+                <option value="">No approved students available</option>
+              ) : (
+                eligibleStudents.map((student) => (
+                  <option key={student.id} value={student.id}>
+                    {student.profile.name} - {student.grade} ({student.student_id || `ID ${student.id}`})
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Duration (hours)</label>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
+              {[24, 48, 72, 168].map((hours) => (
+                <button
+                  type="button"
+                  key={hours}
+                  onClick={() => setDurationHours(hours)}
+                  className={`px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                    durationHours === hours
+                      ? "bg-emerald-600 text-white border-emerald-600"
+                      : "bg-white text-gray-700 border-gray-300 hover:border-emerald-300 hover:bg-emerald-50"
+                  }`}
+                >
+                  {hours}h
+                </button>
+              ))}
+            </div>
+            <input
+              type="number"
+              min={1}
+              max={720}
+              value={durationHours}
+              onChange={(e) => setDurationHours(Number(e.target.value))}
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Reason</label>
+            <textarea
+              rows={3}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Example: Student was absent and needs catch-up access."
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm resize-none"
+            />
+          </div>
+
+          <div className="pt-1 flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2.5 rounded-lg border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting || eligibleStudents.length === 0}
+              className="px-4 py-2.5 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+            >
+              {isSubmitting ? (
+                <>
+                  <Icon icon="solar:loading-bold" className="w-4 h-4 animate-spin" />
+                  Unlocking...
+                </>
+              ) : (
+                <>
+                  <Icon icon="solar:lock-unlocked-bold" className="w-4 h-4" />
+                  Unlock Lesson
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function LessonsPage() {
   const [lessons, setLessons] = useState<TeacherLesson[]>([]);
   const [subjects, setSubjects] = useState<TeacherSubject[]>([]);
+  const [students, setStudents] = useState<TeacherStudent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [selectedGrade, setSelectedGrade] = useState<string>("All");
@@ -239,17 +434,33 @@ export default function LessonsPage() {
   const [selectedLesson, setSelectedLesson] = useState<TeacherLesson | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isUnlockModalOpen, setIsUnlockModalOpen] = useState(false);
+  const [unlockLessonTarget, setUnlockLessonTarget] = useState<TeacherLessonWithMeta | null>(null);
+  const [isUnlocking, setIsUnlocking] = useState(false);
 
   useEffect(() => {
     const fetchLessons = async () => {
       try {
         setIsLoading(true);
-        const [lessonsData, subjectsData] = await Promise.all([
-          getTeacherLessons(),
-          getTeacherSubjects(),
+        const userStr = localStorage.getItem("user");
+        let isHeadTeacher = false;
+        if (userStr) {
+          try {
+            const user = JSON.parse(userStr);
+            isHeadTeacher = user?.role === "HEADTEACHER";
+          } catch {
+            isHeadTeacher = false;
+          }
+        }
+
+        const [lessonsData, subjectsData, studentsData] = await Promise.all([
+          isHeadTeacher ? getHeadTeacherLessons() : getTeacherLessons(),
+          isHeadTeacher ? getHeadTeacherSubjects() : getTeacherSubjects(),
+          getTeacherStudents(),
         ]);
         setLessons(lessonsData);
         setSubjects(subjectsData);
+        setStudents(studentsData);
       } catch (error) {
         console.error("Error fetching lessons:", error);
         showErrorToast("Failed to load lessons. Please try again.");
@@ -352,12 +563,56 @@ export default function LessonsPage() {
   const handleCreateSuccess = async () => {
     // Refresh lessons list
     try {
-      const data = await getTeacherLessons();
+      const userStr = localStorage.getItem("user");
+      let isHeadTeacher = false;
+      if (userStr) {
+        try {
+          const user = JSON.parse(userStr);
+          isHeadTeacher = user?.role === "HEADTEACHER";
+        } catch {
+          isHeadTeacher = false;
+        }
+      }
+
+      const [data, subjectsData, studentsData] = await Promise.all([
+        isHeadTeacher ? getHeadTeacherLessons() : getTeacherLessons(),
+        isHeadTeacher ? getHeadTeacherSubjects() : getTeacherSubjects(),
+        getTeacherStudents(),
+      ]);
       setLessons(data);
-      const subjectsData = await getTeacherSubjects();
       setSubjects(subjectsData);
+      setStudents(studentsData);
     } catch (error) {
       console.error("Error refreshing lessons:", error);
+    }
+  };
+
+  const handleOpenUnlock = (lesson: TeacherLessonWithMeta) => {
+    setUnlockLessonTarget(lesson);
+    setIsUnlockModalOpen(true);
+  };
+
+  const handleUnlockSubmit = async (payload: { studentId: number; durationHours: number; reason: string }) => {
+    if (!unlockLessonTarget) return;
+    try {
+      setIsUnlocking(true);
+      const response = await unlockLessonForStudent({
+        student_id: payload.studentId,
+        lesson_id: unlockLessonTarget.id,
+        duration_hours: payload.durationHours,
+        reason: payload.reason,
+      });
+
+      const expiresLabel = response.expires_at ? formatDateTime(response.expires_at) : `${payload.durationHours} hours`;
+      showSuccessToast(`Lesson unlocked successfully. Access expires ${expiresLabel}.`);
+
+      setIsUnlockModalOpen(false);
+      setUnlockLessonTarget(null);
+    } catch (error) {
+      console.error("Error unlocking lesson:", error);
+      showErrorToast("Failed to unlock lesson. Please try again.");
+    } finally {
+      setIsUnlocking(false);
     }
   };
 
@@ -505,15 +760,15 @@ export default function LessonsPage() {
           {sortedLessons.length > 0 ? (
             <>
               <div className="overflow-x-auto rounded-lg border border-gray-200">
-                <table className="w-full table-fixed min-w-[980px]">
+                <table className="w-full table-fixed min-w-[1060px]">
                   <thead>
                     <tr className="border-b border-gray-200 bg-gray-50">
-                      <th className="w-[34%] text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">Lesson</th>
-                      <th className="w-[20%] text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">Subject</th>
+                      <th className="w-[30%] text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">Lesson</th>
+                      <th className="w-[18%] text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">Subject</th>
                       <th className="w-[12%] text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">Grade</th>
                       <th className="w-[10%] text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">Duration</th>
-                      <th className="w-[12%] text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">Created</th>
-                      <th className="w-[12%] text-right py-3 px-4 text-xs font-semibold text-gray-600 uppercase">Actions</th>
+                      <th className="w-[13%] text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">Created</th>
+                      <th className="w-[17%] text-right py-3 px-4 text-xs font-semibold text-gray-600 uppercase">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -563,7 +818,14 @@ export default function LessonsPage() {
                           <span className="text-sm text-gray-600">{formatDate(lesson.created_at)}</span>
                         </td>
                         <td className="py-4 px-4">
-                          <div className="flex justify-end">
+                          <div className="flex justify-end gap-2">
+                            <button
+                              onClick={() => handleOpenUnlock(lesson)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition-colors"
+                            >
+                              <Icon icon="solar:lock-unlocked-bold" className="w-4 h-4" />
+                              Unlock
+                            </button>
                             <button
                               onClick={() => handleView(lesson)}
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors"
@@ -602,6 +864,19 @@ export default function LessonsPage() {
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         onSuccess={handleCreateSuccess}
+      />
+
+      <UnlockLessonModal
+        isOpen={isUnlockModalOpen}
+        lesson={unlockLessonTarget}
+        students={students}
+        isSubmitting={isUnlocking}
+        onClose={() => {
+          if (isUnlocking) return;
+          setIsUnlockModalOpen(false);
+          setUnlockLessonTarget(null);
+        }}
+        onSubmit={handleUnlockSubmit}
       />
     </DashboardLayout>
   );

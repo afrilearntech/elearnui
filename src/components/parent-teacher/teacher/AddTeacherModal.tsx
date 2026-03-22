@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Icon } from "@iconify/react";
-import { createTeacher } from "@/lib/api/parent-teacher/teacher";
+import { createTeacher, createHeadTeacherTeacher } from "@/lib/api/parent-teacher/teacher";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
 import { ApiClientError } from "@/lib/api/client";
 
@@ -11,11 +11,18 @@ interface AddTeacherModalProps {
   onClose: () => void;
   onSuccess: () => void;
   schoolId: number | null;
+  roleMode?: "teacher" | "headteacher";
 }
 
 const GENDER_OPTIONS = ["MALE", "FEMALE"];
 
-export default function AddTeacherModal({ isOpen, onClose, onSuccess, schoolId }: AddTeacherModalProps) {
+export default function AddTeacherModal({
+  isOpen,
+  onClose,
+  onSuccess,
+  schoolId,
+  roleMode = "teacher",
+}: AddTeacherModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
@@ -111,11 +118,16 @@ export default function AddTeacherModal({ isOpen, onClose, onSuccess, schoolId }
         gender: formData.gender,
         dob: formData.dob,
         school_id: schoolId,
+        ...(roleMode === "headteacher" ? { status: "APPROVED" } : {}),
       };
 
       console.log('Sending payload:', payload);
 
-      await createTeacher(payload);
+      if (roleMode === "headteacher") {
+        await createHeadTeacherTeacher(payload);
+      } else {
+        await createTeacher(payload);
+      }
 
       showSuccessToast("Teacher added successfully!");
       resetForm();

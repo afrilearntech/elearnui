@@ -8,7 +8,7 @@ export interface User {
   email: string;
   phone: string;
   name: string;
-  role: 'PARENT' | 'TEACHER';
+  role: 'PARENT' | 'TEACHER' | 'HEADTEACHER';
   dob: string | null;
   gender: string | null;
   is_active: boolean;

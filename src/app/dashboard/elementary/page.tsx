@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { Icon } from '@iconify/react';
 import ElementaryNavbar from '@/components/elementary/ElementaryNavbar';
 import ElementarySidebar from '@/components/elementary/ElementarySidebar';
 import ElementaryStatsCards from '@/components/elementary/ElementaryStatsCards';
@@ -11,6 +12,7 @@ import ExploreSubjectsSection from '@/components/elementary/ExploreSubjectsSecti
 import RecentAdventuresSection from '@/components/elementary/RecentAdventuresSection';
 import StudentLoadingScreen from '@/components/ui/StudentLoadingScreen';
 import { getElementaryDashboard } from '@/lib/api/dashboard';
+import { getUserProfile, UserProfileResponse } from '@/lib/api/auth';
 import { ApiClientError } from '@/lib/api/client';
 import { showErrorToast, formatErrorMessage } from '@/lib/toast';
 import { useAccessibility } from '@/contexts/AccessibilityContext';
@@ -22,12 +24,14 @@ export default function ElementaryDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [user, setUser] = useState<any>(null);
+  const [profileData, setProfileData] = useState<UserProfileResponse | null>(null);
   const hasAnnouncedPageRef = useRef(false);
 
   const safeName = user?.name || 'Student';
   const lessonCount = dashboardData?.lessons_completed || 0;
-  const points = dashboardData?.points_earned || 0;
-  const streak = dashboardData?.streaks_this_week || 0;
+  const points = profileData?.student?.points ?? dashboardData?.points_earned ?? 0;
+  const streak = profileData?.student?.current_login_streak ?? dashboardData?.streaks_this_week ?? 0;
+  const maxStreak = profileData?.student?.max_login_streak ?? 0;
   const level = dashboardData?.current_level || 'Grade 1';
   const continueLearningCount = dashboardData?.continue_learning?.length || 0;
   const activitiesCount = dashboardData?.recent_activities?.length || 0;
@@ -61,8 +65,15 @@ export default function ElementaryDashboard() {
 
       setIsLoading(true);
       try {
-        const data = await getElementaryDashboard(token);
+        const [data, profile] = await Promise.all([
+          getElementaryDashboard(token),
+          getUserProfile(token).catch(() => null),
+        ]);
         setDashboardData(data);
+        if (profile) {
+          setProfileData(profile);
+          setUser((prev: any) => profile.user || prev);
+        }
       } catch (error) {
         const errorMessage = error instanceof ApiClientError
           ? error.message
@@ -104,7 +115,7 @@ export default function ElementaryDashboard() {
         <main id="main-content" role="main" className="flex-1 bg-linear-to-br from-[#DBEAFE] via-[#F0FDF4] to-[#CFFAFE] sm:pl-[280px] lg:pl-[320px] overflow-x-hidden">
           <div className="p-4 lg:p-8 max-w-full">
             {/* Welcome Banner */}
-            <div className="bg-white/60 rounded-2xl shadow-lg h-[140px] mt-8 sm:mx-8 mx-4 w-full max-w-full overflow-hidden" role="region" aria-label={`Welcome section. Welcome back, ${safeName}. Ready for another magical learning adventure.`}>
+            <div className="relative bg-white/60 rounded-2xl shadow-lg h-[140px] mt-8 sm:mx-8 mx-4 w-full max-w-full overflow-hidden" role="region" aria-label={`Welcome section. Welcome back, ${safeName}. Ready for another magical learning adventure.`}>
               <div className="h-full flex flex-col justify-center px-6 sm:px-8">
                 <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-800 mb-2 truncate" style={{ fontFamily: 'Andika, sans-serif' }}>
                   Welcome back, {user?.name || 'Student'}! ✨
@@ -113,6 +124,55 @@ export default function ElementaryDashboard() {
                   Ready for another magical learning adventure?
                 </p>
               </div>
+              <div className="hidden sm:flex absolute top-4 right-4 items-center gap-2" role="group" aria-label={`Quick progress indicators. Current streak ${streak} days. Total points ${points}.`}>
+                <button
+                  type="button"
+                  onClick={() => router.push('/progress')}
+                  aria-label={`View progress. Current streak is ${streak} day${streak === 1 ? '' : 's'}. Best streak is ${maxStreak} day${maxStreak === 1 ? '' : 's'}.`}
+                  className="inline-flex items-center gap-2.5 rounded-full bg-white/90 hover:bg-white px-4.5 py-2.5 shadow-md border border-orange-100 transition-all"
+                >
+                  <Icon icon="mdi:fire" className="text-orange-600" width={21} height={21} />
+                  <span className="text-sm font-semibold text-gray-800" style={{ fontFamily: 'Andika, sans-serif' }}>
+                    {streak} day streak
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.push('/progress')}
+                  aria-label={`View progress. You have ${Number(points || 0).toLocaleString()} points.`}
+                  className="inline-flex items-center gap-2.5 rounded-full bg-white/90 hover:bg-white px-4.5 py-2.5 shadow-md border border-yellow-100 transition-all"
+                >
+                  <Icon icon="mdi:star-four-points" className="text-yellow-600" width={21} height={21} />
+                  <span className="text-sm font-semibold text-gray-800" style={{ fontFamily: 'Andika, sans-serif' }}>
+                    {Number(points || 0).toLocaleString()} points
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            <div className="sm:hidden sm:mx-8 mx-4 mt-3 flex flex-wrap items-center gap-2" role="group" aria-label={`Quick progress indicators. Current streak ${streak} days. Total points ${points}.`}>
+              <button
+                type="button"
+                onClick={() => router.push('/progress')}
+                aria-label={`View progress. Current streak is ${streak} day${streak === 1 ? '' : 's'}. Best streak is ${maxStreak} day${maxStreak === 1 ? '' : 's'}.`}
+                className="inline-flex items-center gap-2.5 rounded-full bg-white/90 hover:bg-white px-4 py-2.5 shadow-md border border-orange-100 transition-all"
+              >
+                <Icon icon="mdi:fire" className="text-orange-600" width={20} height={20} />
+                <span className="text-sm font-semibold text-gray-800" style={{ fontFamily: 'Andika, sans-serif' }}>
+                  {streak} day streak
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push('/progress')}
+                aria-label={`View progress. You have ${Number(points || 0).toLocaleString()} points.`}
+                className="inline-flex items-center gap-2.5 rounded-full bg-white/90 hover:bg-white px-4 py-2.5 shadow-md border border-yellow-100 transition-all"
+              >
+                <Icon icon="mdi:star-four-points" className="text-yellow-600" width={20} height={20} />
+                <span className="text-sm font-semibold text-gray-800" style={{ fontFamily: 'Andika, sans-serif' }}>
+                  {Number(points || 0).toLocaleString()} points
+                </span>
+              </button>
             </div>
 
             {/* Progress/Stats Section */}
