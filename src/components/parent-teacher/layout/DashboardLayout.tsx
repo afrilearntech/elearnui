@@ -4,6 +4,11 @@ import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import Navbar from "./Navbar";
 import Sidebar from "./Sidebar";
+import {
+  normalizeStoredUserRole,
+  readUserRoleFromLocalStorage,
+  type DashboardRoleDisplay,
+} from "@/lib/parent-teacher/displayRole";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -13,7 +18,17 @@ interface DashboardLayoutProps {
 export default function DashboardLayout({ children, onLinkChild }: DashboardLayoutProps) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [userName, setUserName] = useState<string>("");
-  const [userRole, setUserRole] = useState<string>("Parent");
+  const [userRole, setUserRole] = useState<DashboardRoleDisplay>(() => {
+    if (typeof window === "undefined") return "Parent";
+    try {
+      const userStr = localStorage.getItem("user");
+      if (!userStr) return "Parent";
+      const user = JSON.parse(userStr) as { name?: string; role?: string };
+      return normalizeStoredUserRole(user.role);
+    } catch {
+      return "Parent";
+    }
+  });
   const pathname = usePathname();
   const isAuthPage = pathname?.startsWith("/parent-teacher/sign-in");
 
@@ -28,19 +43,12 @@ export default function DashboardLayout({ children, onLinkChild }: DashboardLayo
       }
 
       try {
-        const user = JSON.parse(userStr);
+        const user = JSON.parse(userStr) as { name?: string; role?: string };
         setUserName(user.name || "User");
-        setUserRole(
-          user.role === "PARENT"
-            ? "Parent"
-            : user.role === "TEACHER"
-            ? "Teacher"
-            : user.role === "HEADTEACHER"
-            ? "Head Teacher"
-            : "User"
-        );
+        setUserRole(normalizeStoredUserRole(user.role));
       } catch (e) {
         console.error("Error parsing user data:", e);
+        setUserRole(readUserRoleFromLocalStorage());
       }
     }
   }, [isAuthPage]);

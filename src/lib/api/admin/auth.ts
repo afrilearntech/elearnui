@@ -1,4 +1,4 @@
-import { apiRequest } from '../client';
+import { apiRequest, unauthenticatedRequest } from '../client';
 
 export interface AdminLoginRequest {
   identifier: string;
@@ -30,7 +30,7 @@ export interface AdminLoginResponse {
 export async function adminLogin(
   data: AdminLoginRequest
 ): Promise<AdminLoginResponse> {
-  return apiRequest<AdminLoginResponse>('/auth/admin/', {
+  return unauthenticatedRequest<AdminLoginResponse>('/auth/admin/', {
     method: 'POST',
     body: JSON.stringify(data),
   });

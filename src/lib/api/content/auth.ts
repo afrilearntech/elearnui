@@ -1,4 +1,4 @@
-import { apiRequest, ApiClientError } from '../client';
+import { apiRequest, unauthenticatedRequest, ApiClientError } from '../client';
 
 export interface ContentLoginRequest {
   identifier: string;
@@ -21,7 +21,7 @@ export interface ContentLoginResponse {
 export async function contentLogin(
   data: ContentLoginRequest
 ): Promise<ContentLoginResponse> {
-  return apiRequest<ContentLoginResponse>('/auth/content/', {
+  return unauthenticatedRequest<ContentLoginResponse>('/auth/content/', {
     method: 'POST',
     body: JSON.stringify(data),
   });

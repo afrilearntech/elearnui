@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { loginParent, loginTeacher, ApiClientError } from "@/lib/api/parent-teacher/auth";
 import { showSuccessToast, showErrorToast, formatErrorMessage } from "@/lib/toast";
+import { normalizeStoredUserRole } from "@/lib/parent-teacher/displayRole";
 
 type ParentTeacherRole = "parent" | "teacher";
 
@@ -79,14 +80,26 @@ export default function RoleLoginForm({ role }: { role: ParentTeacherRole }) {
         : await loginTeacher(credentials);
 
       if (typeof window !== "undefined") {
+        const normalized = normalizeStoredUserRole(response.user.role);
+        const roleForStorage =
+          normalized === "Parent"
+            ? "PARENT"
+            : normalized === "Teacher"
+              ? "TEACHER"
+              : normalized === "Head Teacher"
+                ? "HEADTEACHER"
+                : response.user.role;
         localStorage.setItem("auth_token", response.token);
-        localStorage.setItem("user", JSON.stringify(response.user));
+        localStorage.setItem(
+          "user",
+          JSON.stringify({ ...response.user, role: roleForStorage })
+        );
       }
 
       showSuccessToast(`Welcome back, ${response.user.name}! Redirecting to your dashboard...`);
 
       const resolvedRedirectPath =
-        role === "teacher" && response.user.role === "HEADTEACHER"
+        role === "teacher" && normalizeStoredUserRole(response.user.role) === "Head Teacher"
           ? "/parent-teacher/dashboard/headteacher"
           : config.redirectPath;
 

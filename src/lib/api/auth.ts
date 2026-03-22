@@ -1,4 +1,4 @@
-import { apiRequest } from './client';
+import { apiRequest, unauthenticatedRequest } from './client';
 
 export interface ProfileSetupRequest {
   email: string;
@@ -24,7 +24,7 @@ export interface ProfileSetupResponse {
 export async function profileSetup(
   data: ProfileSetupRequest
 ): Promise<ProfileSetupResponse> {
-  return apiRequest<ProfileSetupResponse>('/onboarding/profilesetup/', {
+  return unauthenticatedRequest<ProfileSetupResponse>('/onboarding/profilesetup/', {
     method: 'POST',
     body: JSON.stringify(data),
   });
@@ -80,7 +80,7 @@ export interface StudentLoginResponse {
 export async function studentLogin(
   data: StudentLoginRequest
 ): Promise<StudentLoginResponse> {
-  return apiRequest<StudentLoginResponse>('/auth/student/', {
+  return unauthenticatedRequest<StudentLoginResponse>('/auth/student/', {
     method: 'POST',
     body: JSON.stringify(data),
   });
@@ -126,7 +126,7 @@ export interface ContentLoginResponse {
 export async function contentLogin(
   data: ContentLoginRequest
 ): Promise<ContentLoginResponse> {
-  return apiRequest<ContentLoginResponse>('/auth/content/', {
+  return unauthenticatedRequest<ContentLoginResponse>('/auth/content/', {
     method: 'POST',
     body: JSON.stringify(data),
   });

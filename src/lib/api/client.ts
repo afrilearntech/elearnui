@@ -83,6 +83,11 @@ export async function apiRequest<T>(
   }
 }
 
+/**
+ * Use for login, registration, and other calls that must NOT send an existing
+ * `Authorization` header. {@link apiRequest} always attaches `localStorage.auth_token`,
+ * which causes "Invalid token" on login if a stale token is still stored.
+ */
 export async function unauthenticatedRequest<T>(
   endpoint: string,
   options: RequestInit = {}

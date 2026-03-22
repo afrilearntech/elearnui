@@ -3,8 +3,10 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useMemo } from "react";
 import { Icon } from "@iconify/react";
 import { showSuccessToast } from "@/lib/toast";
+import { resolveSidebarRole, type DashboardRoleDisplay } from "@/lib/parent-teacher/displayRole";
 
 type NavItem = {
   href: string;
@@ -70,8 +72,12 @@ type SidebarProps = {
 export default function Sidebar({ mobileOpen = false, onClose, userName = "Parent", userRole = "Parent" }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const isTeacher = userRole === "Teacher";
-  const isHeadTeacher = userRole === "Head Teacher";
+  const resolvedRole = useMemo(
+    () => resolveSidebarRole(userRole as DashboardRoleDisplay, pathname),
+    [userRole, pathname]
+  );
+  const isTeacher = resolvedRole === "Teacher";
+  const isHeadTeacher = resolvedRole === "Head Teacher";
   const isTeacherOrHeadTeacher = isTeacher || isHeadTeacher;
   const navItems = isHeadTeacher ? headTeacherNavItems : isTeacher ? teacherNavItems : parentNavItems;
 
@@ -127,7 +133,7 @@ export default function Sidebar({ mobileOpen = false, onClose, userName = "Paren
             >
               <div className="font-semibold text-gray-900 text-sm mb-2">{userName}</div>
               <div className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-700">
-                {userRole}
+                {resolvedRole}
               </div>
             </Link>
             <button 
@@ -181,7 +187,7 @@ export default function Sidebar({ mobileOpen = false, onClose, userName = "Paren
                 >
                   <div className="font-semibold text-gray-900 text-sm mb-2">{userName}</div>
                   <div className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-700">
-                    {userRole}
+                    {resolvedRole}
                   </div>
                 </Link>
                 <button 
@@ -199,4 +205,3 @@ export default function Sidebar({ mobileOpen = false, onClose, userName = "Paren
     </>
   );
 }
-

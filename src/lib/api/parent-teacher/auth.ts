@@ -1,4 +1,4 @@
-import { apiRequest } from '../client';
+import { apiRequest, unauthenticatedRequest } from '../client';
 import { ApiClientError } from '../client';
 
 export { ApiClientError };
@@ -34,7 +34,7 @@ export async function loginParent(
   credentials: LoginRequest
 ): Promise<LoginResponse> {
   try {
-    const response = await apiRequest<LoginResponse>('/auth/parent/', {
+    const response = await unauthenticatedRequest<LoginResponse>('/auth/parent/', {
       method: 'POST',
       body: JSON.stringify(credentials),
     });
@@ -54,7 +54,7 @@ export async function loginTeacher(
   credentials: LoginRequest
 ): Promise<LoginResponse> {
   try {
-    const response = await apiRequest<LoginResponse>('/auth/content/', {
+    const response = await unauthenticatedRequest<LoginResponse>('/auth/content/', {
       method: 'POST',
       body: JSON.stringify(credentials),
     });
