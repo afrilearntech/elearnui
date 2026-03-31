@@ -17,6 +17,7 @@ type NavItem = {
 const parentNavItems: NavItem[] = [
   { href: "/parent-teacher/dashboard", label: "Dashboard", icon: "solar:widget-5-bold" },
   { href: "/parent-teacher/dashboard/children", label: "My Children", icon: "solar:users-group-two-rounded-bold" },
+  { href: "/parent-teacher/dashboard/leaderboard", label: "Leaderboard", icon: "solar:cup-star-bold" },
   { href: "/parent-teacher/dashboard/grades", label: "Grades", icon: "solar:diploma-verified-bold" },
   { href: "/parent-teacher/dashboard/assessments", label: "General Assessment", icon: "solar:document-text-bold" },
   { href: "/parent-teacher/dashboard/submissions", label: "Submissions", icon: "solar:file-check-bold" },

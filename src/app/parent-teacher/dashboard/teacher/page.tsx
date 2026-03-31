@@ -1,11 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import DashboardLayout from "@/components/parent-teacher/layout/DashboardLayout";
 import { Icon } from "@iconify/react";
 import Link from "next/link";
-import { getTeacherDashboard, TeacherDashboard } from "@/lib/api/parent-teacher/teacher";
+import { getTeacherDashboard } from "@/lib/api/parent-teacher/teacher";
 import { showErrorToast } from "@/lib/toast";
+import { ptQueryKeys } from "@/lib/parent-teacher/queryKeys";
+import { PortalDashboardSkeleton } from "@/components/parent-teacher/PortalDataSkeleton";
 
 
 const formatDate = (dateString: string) => {
@@ -27,51 +30,27 @@ const formatDateTime = (dateString: string) => {
   });
 };
 
-const getDaysUntilDue = (dueDate: string) => {
-  const today = new Date();
-  const due = new Date(dueDate);
-  const diffTime = due.getTime() - today.getTime();
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  return diffDays;
-};
-
 export default function TeacherDashboardPage() {
-  const [dashboardData, setDashboardData] = useState<TeacherDashboard | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const { data, isPending, isError, error } = useQuery({
+    queryKey: ptQueryKeys.teacherDashboard,
+    queryFn: getTeacherDashboard,
+  });
 
   useEffect(() => {
-    const fetchDashboard = async () => {
-      try {
-        setIsLoading(true);
-        const data = await getTeacherDashboard();
-        setDashboardData(data);
-      } catch (error) {
-        console.error("Error fetching dashboard:", error);
-        showErrorToast("Failed to load dashboard data. Please try again.");
-      } finally {
-        setIsLoading(false);
-      }
-    };
+    if (!isError) return;
+    console.error("Error fetching dashboard:", error);
+    showErrorToast("Failed to load dashboard data. Please try again.");
+  }, [isError, error]);
 
-    fetchDashboard();
-  }, []);
-
-  if (isLoading) {
+  if (isPending && !data) {
     return (
       <DashboardLayout>
-        <div className="space-y-6">
-          <div className="flex items-center justify-center min-h-[400px]">
-            <div className="text-center">
-              <Icon icon="solar:loading-bold" className="w-8 h-8 text-emerald-600 animate-spin mx-auto mb-2" />
-              <p className="text-gray-600">Loading dashboard...</p>
-            </div>
-          </div>
-        </div>
+        <PortalDashboardSkeleton />
       </DashboardLayout>
     );
   }
 
-  if (!dashboardData) {
+  if (!data) {
     return (
       <DashboardLayout>
         <div className="space-y-6">
@@ -85,7 +64,7 @@ export default function TeacherDashboardPage() {
     );
   }
 
-  const { summarycards, top_performers, pending_submissions, upcoming_deadlines } = dashboardData;
+  const { summarycards, top_performers, pending_submissions, upcoming_deadlines } = data;
 
   return (
     <DashboardLayout>

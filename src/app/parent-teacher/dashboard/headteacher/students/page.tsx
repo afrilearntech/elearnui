@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { Icon } from "@iconify/react";
 import DashboardLayout from "@/components/parent-teacher/layout/DashboardLayout";
@@ -14,6 +15,8 @@ import { getUserProfile } from "@/lib/api/auth";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
 import AddStudentModal from "@/components/parent-teacher/teacher/AddStudentModal";
 import BulkUploadModal from "@/components/parent-teacher/teacher/BulkUploadModal";
+import { ptQueryKeys } from "@/lib/parent-teacher/queryKeys";
+import { PortalLoadingOverlay } from "@/components/parent-teacher/PortalDataSkeleton";
 
 const formatDate = (dateString: string | null) => {
   if (!dateString) return "N/A";
@@ -35,20 +38,24 @@ const statusColor = (status: string) => {
   return "bg-gray-100 text-gray-700 border-gray-200";
 };
 
+type HeadStudentsQueryData = {
+  students: HeadTeacherStudent[];
+  schoolId: number | null;
+};
+
 export default function HeadTeacherStudentsPage() {
   const router = useRouter();
-  const [students, setStudents] = useState<HeadTeacherStudent[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const [authReady, setAuthReady] = useState(false);
   const [search, setSearch] = useState("");
   const [selectedGrade, setSelectedGrade] = useState("All");
   const [selectedStatus, setSelectedStatus] = useState("All");
   const [selectedStudent, setSelectedStudent] = useState<HeadTeacherStudent | null>(null);
-  const [headTeacherSchoolId, setHeadTeacherSchoolId] = useState<number | null>(null);
   const [isAddStudentModalOpen, setIsAddStudentModalOpen] = useState(false);
   const [isBulkUploadModalOpen, setIsBulkUploadModalOpen] = useState(false);
   const [isModeratingStudentId, setIsModeratingStudentId] = useState<number | null>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const userStr = localStorage.getItem("user");
     if (!userStr) {
       router.push("/parent-teacher/sign-in/teacher");
@@ -64,29 +71,33 @@ export default function HeadTeacherStudentsPage() {
       router.push("/parent-teacher/sign-in/teacher");
       return;
     }
-
-    const fetchStudents = async () => {
-      try {
-        setIsLoading(true);
-        const token = localStorage.getItem("auth_token");
-        const [data, profile] = await Promise.all([
-          getHeadTeacherStudents(),
-          token ? getUserProfile(token).catch(() => null) : Promise.resolve(null),
-        ]);
-        setStudents(data);
-        if (profile?.teacher?.school_id) {
-          setHeadTeacherSchoolId(profile.teacher.school_id);
-        }
-      } catch (error) {
-        console.error("Error fetching headteacher students:", error);
-        showErrorToast("Failed to load students. Please try again.");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchStudents();
+    setAuthReady(true);
   }, [router]);
+
+  const { data: studentsQuery, isPending, isError, error } = useQuery({
+    queryKey: ptQueryKeys.headTeacherStudents,
+    queryFn: async (): Promise<HeadStudentsQueryData> => {
+      const token = localStorage.getItem("auth_token");
+      const [studentList, profile] = await Promise.all([
+        getHeadTeacherStudents(),
+        token ? getUserProfile(token).catch(() => null) : Promise.resolve(null),
+      ]);
+      return {
+        students: studentList,
+        schoolId: profile?.teacher?.school_id ?? null,
+      };
+    },
+    enabled: authReady,
+  });
+
+  const students = studentsQuery?.students ?? [];
+  const headTeacherSchoolId = studentsQuery?.schoolId ?? null;
+
+  useEffect(() => {
+    if (!isError) return;
+    console.error("Error fetching headteacher students:", error);
+    showErrorToast("Failed to load students. Please try again.");
+  }, [isError, error]);
 
   const grades = useMemo(
     () => ["All", ...Array.from(new Set(students.map((s) => s.grade))).sort()],
@@ -138,7 +149,13 @@ export default function HeadTeacherStudentsPage() {
           ? await approveHeadTeacherStudent(student.id)
           : await rejectHeadTeacherStudent(student.id);
 
-      setStudents((prev) => prev.map((item) => (item.id === student.id ? updated : item)));
+      queryClient.setQueryData(ptQueryKeys.headTeacherStudents, (old: HeadStudentsQueryData | undefined) => {
+        if (!old) return old;
+        return {
+          ...old,
+          students: old.students.map((item) => (item.id === student.id ? updated : item)),
+        };
+      });
       setSelectedStudent((prev) => (prev && prev.id === student.id ? updated : prev));
       showSuccessToast(
         action === "approve"
@@ -153,15 +170,10 @@ export default function HeadTeacherStudentsPage() {
     }
   };
 
-  if (isLoading) {
+  if (!authReady || (isPending && !studentsQuery)) {
     return (
       <DashboardLayout>
-        <div className="flex items-center justify-center min-h-[420px]">
-          <div className="text-center">
-            <Icon icon="solar:loading-bold" className="w-9 h-9 text-indigo-600 animate-spin mx-auto mb-2" />
-            <p className="text-gray-600">Loading school students...</p>
-          </div>
-        </div>
+        <PortalLoadingOverlay label="Loading school students…" />
       </DashboardLayout>
     );
   }
@@ -479,28 +491,14 @@ export default function HeadTeacherStudentsPage() {
         onClose={() => setIsAddStudentModalOpen(false)}
         roleMode="headteacher"
         schoolId={headTeacherSchoolId}
-        onSuccess={async () => {
-          try {
-            const data = await getHeadTeacherStudents();
-            setStudents(data);
-          } catch (error) {
-            console.error("Error refreshing students:", error);
-          }
-        }}
+        onSuccess={() => queryClient.invalidateQueries({ queryKey: ptQueryKeys.headTeacherStudents })}
       />
 
       <BulkUploadModal
         isOpen={isBulkUploadModalOpen}
         onClose={() => setIsBulkUploadModalOpen(false)}
         roleMode="headteacher"
-        onSuccess={async () => {
-          try {
-            const data = await getHeadTeacherStudents();
-            setStudents(data);
-          } catch (error) {
-            console.error("Error refreshing students:", error);
-          }
-        }}
+        onSuccess={() => queryClient.invalidateQueries({ queryKey: ptQueryKeys.headTeacherStudents })}
       />
     </DashboardLayout>
   );

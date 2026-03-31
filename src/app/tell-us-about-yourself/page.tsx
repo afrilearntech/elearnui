@@ -25,21 +25,7 @@ export default function TellUsAboutYourself() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [token, setToken] = useState<string | null>(null);
 
-  const gradeOptions = [
-    'GRADE 1',
-    'GRADE 2',
-    'GRADE 3',
-    'GRADE 4',
-    'GRADE 5',
-    'GRADE 6',
-    'GRADE 7',
-    'GRADE 8',
-    'GRADE 9',
-    'GRADE 10',
-    'GRADE 11',
-    'GRADE 12',
-    'OTHER'
-  ];
+  const gradeOptions = ['GRADE 1', 'GRADE 2', 'GRADE 3'];
 
   useEffect(() => {
     const storedToken = localStorage.getItem('auth_token');

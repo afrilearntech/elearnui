@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import DashboardLayout from "@/components/parent-teacher/layout/DashboardLayout";
 import { Icon } from "@iconify/react";
 import { getTeacherStudents, TeacherStudent, approveStudent, rejectStudent } from "@/lib/api/parent-teacher/teacher";
@@ -8,6 +9,8 @@ import { showErrorToast, showSuccessToast } from "@/lib/toast";
 import { ApiClientError } from "@/lib/api/client";
 import AddStudentModal from "@/components/parent-teacher/teacher/AddStudentModal";
 import BulkUploadModal from "@/components/parent-teacher/teacher/BulkUploadModal";
+import { ptQueryKeys } from "@/lib/parent-teacher/queryKeys";
+import { PortalLoadingOverlay } from "@/components/parent-teacher/PortalDataSkeleton";
 
 
 const formatDate = (dateString: string) => {
@@ -20,8 +23,13 @@ const formatDate = (dateString: string) => {
 };
 
 export default function MyClassPage() {
-  const [students, setStudents] = useState<TeacherStudent[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const { data, isPending, isError, error } = useQuery({
+    queryKey: ptQueryKeys.teacherClassStudents,
+    queryFn: getTeacherStudents,
+  });
+  const students = data ?? [];
+
   const [search, setSearch] = useState("");
   const [selectedGrade, setSelectedGrade] = useState<string>("All");
   const [page, setPage] = useState(1);
@@ -33,21 +41,15 @@ export default function MyClassPage() {
   const pageSize = 9;
 
   useEffect(() => {
-    const fetchStudents = async () => {
-      try {
-        setIsLoading(true);
-        const data = await getTeacherStudents();
-        setStudents(data);
-      } catch (error) {
-        console.error("Error fetching students:", error);
-        showErrorToast("Failed to load students. Please try again.");
-      } finally {
-        setIsLoading(false);
-      }
-    };
+    if (!isError) return;
+    console.error("Error fetching students:", error);
+    showErrorToast("Failed to load students. Please try again.");
+  }, [isError, error]);
 
-    fetchStudents();
-  }, []);
+  const invalidateTeacherStudentCaches = () => {
+    void queryClient.invalidateQueries({ queryKey: ptQueryKeys.teacherClassStudents });
+    void queryClient.invalidateQueries({ queryKey: ptQueryKeys.lessonsBundle });
+  };
 
   const grades = useMemo(() => {
     const uniqueGrades = Array.from(new Set(students.map((s) => s.grade))).sort();
@@ -90,10 +92,13 @@ export default function MyClassPage() {
       }
 
       showSuccessToast(`Student ${action === "approve" ? "approved" : "rejected"} successfully!`);
-      
-      const data = await getTeacherStudents();
-      setStudents(data);
-      
+
+      queryClient.setQueryData(ptQueryKeys.teacherClassStudents, (old: TeacherStudent[] | undefined) => {
+        if (!old) return old;
+        return old.map((s) => (s.id === updatedStudent.id ? updatedStudent : s));
+      });
+      void queryClient.invalidateQueries({ queryKey: ptQueryKeys.lessonsBundle });
+
       if (selectedStudent && selectedStudent.id === studentId) {
         setSelectedStudent(updatedStudent);
       }
@@ -186,12 +191,13 @@ export default function MyClassPage() {
             </div>
           </div>
 
-          {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="text-center">
-                <Icon icon="solar:loading-bold" className="w-8 h-8 text-emerald-600 animate-spin mx-auto mb-2" />
-                <p className="text-gray-600">Loading students...</p>
-              </div>
+          {isPending && data === undefined ? (
+            <PortalLoadingOverlay label="Loading students…" />
+          ) : isError && data === undefined ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <Icon icon="solar:danger-circle-bold" className="mx-auto mb-2 h-10 w-10 text-red-400" />
+              <p className="text-gray-700 font-medium">Couldn&apos;t load students</p>
+              <p className="mt-1 text-sm text-gray-500">Check your connection and try refreshing the page.</p>
             </div>
           ) : pagedStudents.length > 0 ? (
             <>
@@ -642,29 +648,13 @@ export default function MyClassPage() {
       <AddStudentModal
         isOpen={isAddStudentModalOpen}
         onClose={() => setIsAddStudentModalOpen(false)}
-        onSuccess={async () => {
-          // Refresh students list
-          try {
-            const data = await getTeacherStudents();
-            setStudents(data);
-          } catch (error) {
-            console.error("Error refreshing students:", error);
-          }
-        }}
+        onSuccess={invalidateTeacherStudentCaches}
       />
 
       <BulkUploadModal
         isOpen={isBulkUploadModalOpen}
         onClose={() => setIsBulkUploadModalOpen(false)}
-        onSuccess={async () => {
-          // Refresh students list
-          try {
-            const data = await getTeacherStudents();
-            setStudents(data);
-          } catch (error) {
-            console.error("Error refreshing students:", error);
-          }
-        }}
+        onSuccess={invalidateTeacherStudentCaches}
       />
     </DashboardLayout>
   );

@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { Icon } from '@iconify/react';
 import Image from 'next/image';
@@ -13,6 +13,8 @@ import { showErrorToast, formatErrorMessage } from '@/lib/toast';
 import StudentLoadingScreen from '@/components/ui/StudentLoadingScreen';
 import { useAccessibility } from '@/contexts/AccessibilityContext';
 import { useAutoRead } from '@/hooks/useAutoRead';
+import { studentQueryKeys } from '@/lib/student/queryKeys';
+import { useStudentAuthReady } from '@/hooks/student/useStudentAuthReady';
 
 interface AssessmentCard extends KidsAssessment {
   displayStatus: 'pending' | 'due_soon' | 'overdue' | 'submitted';
@@ -137,122 +139,104 @@ const formatDueDate = (dateString: string): string => {
 };
 
 export default function MyAssignmentsPage() {
-  const router = useRouter();
   const { isEnabled, announce, playSound } = useAccessibility();
+  const authReady = useStudentAuthReady();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [assessments, setAssessments] = useState<AssessmentCard[]>([]);
-  const [stats, setStats] = useState({
-    total: 0,
-    pending: 0,
-    due_soon: 0,
-    overdue: 0,
-    submitted: 0,
-  });
+  const hasAnnouncedPageRef = useRef(false);
   const [filter, setFilter] = useState<'all' | 'pending' | 'due_soon' | 'overdue' | 'submitted'>('all');
 
-  useEffect(() => {
-    const fetchAssessments = async () => {
+  const { data, isPending, isError, error, refetch } = useQuery({
+    queryKey: studentQueryKeys.kidsAssessments,
+    queryFn: async () => {
       const token = localStorage.getItem('auth_token');
-      if (!token) {
-        router.push('/login');
-        return;
-      }
+      if (!token) throw new Error('Missing auth token');
+      return getKidsAssessments(token);
+    },
+    enabled: authReady,
+    refetchOnWindowFocus: true,
+  });
 
-      setIsLoading(true);
-      try {
-        const data = await getKidsAssessments(token);
-        
-        // Hide assessments that have no questions for better student UX
-        const assessmentsWithQuestions = (data.assessments || []).filter(
-          (assessment) => assessment.has_questions !== false
-        );
-
-        // Separate lesson and general assessments
-        const lessonAssessments = assessmentsWithQuestions.filter(a => a.type === 'lesson' && a.lesson_id);
-        const generalAssessments = assessmentsWithQuestions.filter(a => a.type === 'general' || !a.lesson_id);
-        
-        // Sort lesson assessments by lesson_id (sequential order)
-        lessonAssessments.sort((a, b) => (a.lesson_id || 0) - (b.lesson_id || 0));
-        
-        // Determine lock status for lesson assessments
-        const lessonAssessmentsWithLocks = lessonAssessments.map((assessment, index) => {
-          // First lesson assessment is always unlocked
-          if (index === 0) {
-            const config = getStatusConfig(assessment, false);
-            return { ...assessment, ...config };
-          }
-          
-          // Check if previous assessment is completed
-          const previousAssessment = lessonAssessments[index - 1];
-          const previousCompleted = isAssessmentCompleted(previousAssessment.id);
-          
-          // Lock if previous is not completed
-          const isLocked = !previousCompleted;
-          const config = getStatusConfig(assessment, isLocked);
-          return { ...assessment, ...config };
-        });
-        
-        // General assessments are always unlocked
-        const generalAssessmentsWithStatus = generalAssessments.map((assessment) => {
-          const config = getStatusConfig(assessment, false);
-          return { ...assessment, ...config };
-        });
-        
-        // Combine: lesson assessments first (in order), then general assessments
-        const assessmentsWithStatus = [...lessonAssessmentsWithLocks, ...generalAssessmentsWithStatus];
-        
-        setAssessments(assessmentsWithStatus);
-        const statsData = {
-          total: assessmentsWithStatus.length,
-          pending: assessmentsWithStatus.filter(a => !a.isSubmitted && !a.isLocked).length,
-          due_soon: 0,
-          overdue: 0,
-          submitted: assessmentsWithStatus.filter(a => a.isSubmitted).length,
-        };
-        setStats(statsData);
-        
-        // Auto-read page summary
-        const lockedCount = assessmentsWithStatus.filter(a => a.isLocked).length;
-        const pageContent = `Assessments page loaded. ${statsData.total} total assessments available. ` +
-          `${statsData.pending} pending, ${statsData.submitted} completed. ` +
-          `${lockedCount > 0 ? `${lockedCount} locked. ` : ''}` +
-          `Use Tab or Arrow keys to navigate between items, Enter to open an assessment. ` +
-          `Press question mark for keyboard shortcuts help.`;
-        
-        // This will auto-read when assessments are loaded
-        if (isEnabled) {
-          setTimeout(() => {
-            announce(pageContent, 'polite');
-          }, 500);
-        }
-      } catch (error) {
-        const errorMessage = error instanceof ApiClientError
-          ? error.message
-          : error instanceof Error
-          ? error.message
-          : 'Failed to load assessments';
-        showErrorToast(formatErrorMessage(errorMessage));
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchAssessments();
-    
-
+  useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        fetchAssessments();
+        void refetch();
       }
     };
-    
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [refetch]);
+
+  useEffect(() => {
+    if (!isError) return;
+    console.error('Assessments page error:', error);
+    const errorMessage = error instanceof ApiClientError
+      ? error.message
+      : error instanceof Error
+      ? error.message
+      : 'Failed to load assessments';
+    showErrorToast(formatErrorMessage(errorMessage));
+  }, [isError, error]);
+
+  const { assessments, stats } = useMemo(() => {
+    const emptyStats = { total: 0, pending: 0, due_soon: 0, overdue: 0, submitted: 0 };
+    if (!data?.assessments) {
+      return { assessments: [] as AssessmentCard[], stats: emptyStats };
+    }
+
+    const assessmentsWithQuestions = (data.assessments || []).filter(
+      (assessment) => assessment.has_questions !== false,
+    );
+
+    const lessonAssessments = assessmentsWithQuestions.filter((a) => a.type === 'lesson' && a.lesson_id);
+    const generalAssessments = assessmentsWithQuestions.filter((a) => a.type === 'general' || !a.lesson_id);
+
+    lessonAssessments.sort((a, b) => (a.lesson_id || 0) - (b.lesson_id || 0));
+
+    const lessonAssessmentsWithLocks = lessonAssessments.map((assessment, index) => {
+      if (index === 0) {
+        const config = getStatusConfig(assessment, false);
+        return { ...assessment, ...config };
+      }
+      const previousAssessment = lessonAssessments[index - 1];
+      const previousCompleted = isAssessmentCompleted(previousAssessment.id);
+      const isLocked = !previousCompleted;
+      const config = getStatusConfig(assessment, isLocked);
+      return { ...assessment, ...config };
+    });
+
+    const generalAssessmentsWithStatus = generalAssessments.map((assessment) => {
+      const config = getStatusConfig(assessment, false);
+      return { ...assessment, ...config };
+    });
+
+    const assessmentsWithStatus = [...lessonAssessmentsWithLocks, ...generalAssessmentsWithStatus];
+
+    const statsData = {
+      total: assessmentsWithStatus.length,
+      pending: assessmentsWithStatus.filter((a) => !a.isSubmitted && !a.isLocked).length,
+      due_soon: 0,
+      overdue: 0,
+      submitted: assessmentsWithStatus.filter((a) => a.isSubmitted).length,
     };
-  }, [router]);
+
+    return { assessments: assessmentsWithStatus, stats: statsData };
+  }, [data]);
+
+  useEffect(() => {
+    if (!isEnabled || data === undefined || hasAnnouncedPageRef.current) return;
+    hasAnnouncedPageRef.current = true;
+    const lockedCount = assessments.filter((a) => a.isLocked).length;
+    const pageContent =
+      `Assessments page loaded. ${stats.total} total assessments available. ` +
+      `${stats.pending} pending, ${stats.submitted} completed. ` +
+      `${lockedCount > 0 ? `${lockedCount} locked. ` : ''}` +
+      `Use Tab or Arrow keys to navigate between items, Enter to open an assessment. ` +
+      `Press question mark for keyboard shortcuts help.`;
+    const t = setTimeout(() => announce(pageContent, 'polite'), 500);
+    return () => clearTimeout(t);
+  }, [isEnabled, data, assessments, stats, announce]);
+
+  const isLoading = !authReady || (isPending && data === undefined);
 
   const handleMenuToggle = () => setIsMobileMenuOpen(!isMobileMenuOpen);
   const handleMenuClose = () => setIsMobileMenuOpen(false);

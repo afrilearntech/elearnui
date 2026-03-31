@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Icon } from "@iconify/react";
+import { useQuery } from "@tanstack/react-query";
 import DashboardLayout from "@/components/parent-teacher/layout/DashboardLayout";
-import { getHeadTeacherDashboard, HeadTeacherDashboard } from "@/lib/api/parent-teacher/teacher";
+import { getHeadTeacherDashboard } from "@/lib/api/parent-teacher/teacher";
 import { showErrorToast } from "@/lib/toast";
 import { useRouter } from "next/navigation";
+import { ptQueryKeys } from "@/lib/parent-teacher/queryKeys";
+import { PortalDashboardSkeleton } from "@/components/parent-teacher/PortalDataSkeleton";
 
 const formatDateTime = (dateString: string) => {
   const date = new Date(dateString);
@@ -30,10 +33,9 @@ const formatDate = (dateString: string) => {
 
 export default function HeadTeacherDashboardPage() {
   const router = useRouter();
-  const [dashboardData, setDashboardData] = useState<HeadTeacherDashboard | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [authReady, setAuthReady] = useState(false);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const userStr = localStorage.getItem("user");
     if (!userStr) {
       router.push("/parent-teacher/sign-in/teacher");
@@ -51,21 +53,20 @@ export default function HeadTeacherDashboardPage() {
       return;
     }
 
-    const fetchDashboard = async () => {
-      try {
-        setIsLoading(true);
-        const data = await getHeadTeacherDashboard();
-        setDashboardData(data);
-      } catch (error) {
-        console.error("Error fetching headteacher dashboard:", error);
-        showErrorToast("Failed to load headteacher dashboard data. Please try again.");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchDashboard();
+    setAuthReady(true);
   }, [router]);
+
+  const { data: dashboardData, isPending, isError, error } = useQuery({
+    queryKey: ptQueryKeys.headTeacherDashboard,
+    queryFn: getHeadTeacherDashboard,
+    enabled: authReady,
+  });
+
+  useEffect(() => {
+    if (!isError) return;
+    console.error("Error fetching headteacher dashboard:", error);
+    showErrorToast("Failed to load headteacher dashboard data. Please try again.");
+  }, [isError, error]);
 
   const cards = useMemo(() => {
     if (!dashboardData) return [];
@@ -105,15 +106,10 @@ export default function HeadTeacherDashboardPage() {
     ];
   }, [dashboardData]);
 
-  if (isLoading) {
+  if (!authReady || (isPending && !dashboardData)) {
     return (
       <DashboardLayout>
-        <div className="flex items-center justify-center min-h-[420px]">
-          <div className="text-center">
-            <Icon icon="solar:loading-bold" className="w-9 h-9 text-indigo-600 animate-spin mx-auto mb-2" />
-            <p className="text-gray-600">Loading headteacher dashboard...</p>
-          </div>
-        </div>
+        <PortalDashboardSkeleton />
       </DashboardLayout>
     );
   }

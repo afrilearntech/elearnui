@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import DashboardLayout from "@/components/parent-teacher/layout/DashboardLayout";
 import { Icon } from "@iconify/react";
 import {
@@ -11,11 +12,38 @@ import {
   getHeadTeacherSubjects,
   TeacherSubject,
   getTeacherStudents,
+  getHeadTeacherStudents,
   TeacherStudent,
   unlockLessonForStudent,
+  unlockHeadTeacherLessonForStudent,
+  UnlockLessonResponse,
+  revokeTeacherLessonUnlock,
+  revokeHeadTeacherLessonUnlock,
 } from "@/lib/api/parent-teacher/teacher";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
+import { ApiClientError } from "@/lib/api/client";
+import { normalizeStoredUserRole } from "@/lib/parent-teacher/displayRole";
+import {
+  gradesMatch,
+  isApprovedStudentStatus,
+  lessonHasAssignableGrade,
+  resolveLessonGrade,
+} from "@/lib/parent-teacher/gradeMatch";
 import CreateLessonModal from "@/components/parent-teacher/teacher/CreateLessonModal";
+import { ptQueryKeys } from "@/lib/parent-teacher/queryKeys";
+import { PortalLoadingOverlay } from "@/components/parent-teacher/PortalDataSkeleton";
+
+function readIsHeadTeacher(): boolean {
+  if (typeof window === "undefined") return false;
+  const userStr = localStorage.getItem("user");
+  if (!userStr) return false;
+  try {
+    const user = JSON.parse(userStr);
+    return normalizeStoredUserRole(user.role) === "Head Teacher";
+  } catch {
+    return false;
+  }
+}
 
 const getStatusColor = (status: string) => {
   switch (status.toUpperCase()) {
@@ -263,16 +291,14 @@ function UnlockLessonModal({
   const [durationHours, setDurationHours] = useState<number>(72);
   const [reason, setReason] = useState("");
 
+  const canMatchByGrade = lesson ? lessonHasAssignableGrade(lesson.grade) : false;
+
   const eligibleStudents = useMemo(() => {
-    if (!lesson) return [];
-    const lessonGrade = lesson.grade?.toUpperCase();
-    const sameGradeStudents = students.filter(
-      (student) => student.grade?.toUpperCase() === lessonGrade && student.status === "APPROVED"
+    if (!lesson || !canMatchByGrade) return [];
+    return students.filter(
+      (student) => gradesMatch(lesson.grade, student.grade) && isApprovedStudentStatus(student.status)
     );
-    return sameGradeStudents.length > 0
-      ? sameGradeStudents
-      : students.filter((student) => student.status === "APPROVED");
-  }, [lesson, students]);
+  }, [lesson, students, canMatchByGrade]);
 
   useEffect(() => {
     if (!isOpen || !lesson) return;
@@ -291,8 +317,24 @@ function UnlockLessonModal({
             <div>
               <h3 className="text-xl font-bold text-gray-900">Unlock Lesson for Student</h3>
               <p className="text-sm text-gray-600 mt-1">
-                Open <span className="font-semibold text-gray-900">{lesson.title}</span> for a selected student.
+                Open <span className="font-semibold text-gray-900">{lesson.title}</span> for a student in the same
+                grade as this lesson.
               </p>
+              {canMatchByGrade ? (
+                <div className="mt-3 inline-flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Lesson grade</span>
+                  <span
+                    className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border ${getGradeColor(
+                      lesson.grade
+                    )}`}
+                  >
+                    {lesson.grade}
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    Only {lesson.grade} students you can manage are listed.
+                  </span>
+                </div>
+              ) : null}
             </div>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-700 transition-colors" aria-label="Close unlock lesson modal">
               <Icon icon="solar:close-circle-bold" className="w-6 h-6" />
@@ -331,19 +373,40 @@ function UnlockLessonModal({
             </div>
           </div>
 
+          {!canMatchByGrade ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+              <p className="text-sm font-semibold text-amber-900">Cannot unlock yet</p>
+              <p className="text-sm text-amber-800 mt-1">
+                This lesson’s subject has no grade assigned in the system. Assign a grade to the subject first, then
+                you can unlock for students in that grade.
+              </p>
+            </div>
+          ) : eligibleStudents.length === 0 ? (
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <p className="text-sm font-semibold text-gray-900">No matching students</p>
+              <p className="text-sm text-gray-600 mt-1">
+                There are no approved students in <span className="font-semibold">{lesson.grade}</span> in your list.
+                Add or approve students for this grade, then try again.
+              </p>
+            </div>
+          ) : null}
+
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Student</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Student <span className="text-gray-400 font-normal">({lesson.grade} only)</span>
+            </label>
             <select
               value={selectedStudentId}
               onChange={(e) => setSelectedStudentId(e.target.value)}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+              disabled={!canMatchByGrade || eligibleStudents.length === 0}
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm disabled:bg-gray-100 disabled:text-gray-500"
             >
               {eligibleStudents.length === 0 ? (
-                <option value="">No approved students available</option>
+                <option value="">Select a student…</option>
               ) : (
                 eligibleStudents.map((student) => (
                   <option key={student.id} value={student.id}>
-                    {student.profile.name} - {student.grade} ({student.student_id || `ID ${student.id}`})
+                    {student.profile.name} — {student.grade} ({student.student_id || `ID ${student.id}`})
                   </option>
                 ))
               )}
@@ -399,7 +462,7 @@ function UnlockLessonModal({
             </button>
             <button
               type="submit"
-              disabled={isSubmitting || eligibleStudents.length === 0}
+              disabled={isSubmitting || !canMatchByGrade || eligibleStudents.length === 0}
               className="px-4 py-2.5 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
             >
               {isSubmitting ? (
@@ -421,11 +484,211 @@ function UnlockLessonModal({
   );
 }
 
+interface RevokeLessonModalProps {
+  isOpen: boolean;
+  lesson: TeacherLessonWithMeta | null;
+  students: TeacherStudent[];
+  isSubmitting: boolean;
+  onClose: () => void;
+  onSubmit: (payload: { studentId: number }) => Promise<void>;
+}
+
+function RevokeLessonModal({
+  isOpen,
+  lesson,
+  students,
+  isSubmitting,
+  onClose,
+  onSubmit,
+}: RevokeLessonModalProps) {
+  const [selectedStudentId, setSelectedStudentId] = useState<string>("");
+  const [confirmed, setConfirmed] = useState(false);
+
+  const canMatchByGrade = lesson ? lessonHasAssignableGrade(lesson.grade) : false;
+
+  const eligibleStudents = useMemo(() => {
+    if (!lesson || !canMatchByGrade) return [];
+    return students.filter(
+      (student) => gradesMatch(lesson.grade, student.grade) && isApprovedStudentStatus(student.status)
+    );
+  }, [lesson, students, canMatchByGrade]);
+
+  useEffect(() => {
+    if (!isOpen || !lesson) return;
+    setConfirmed(false);
+    setSelectedStudentId(eligibleStudents[0] ? String(eligibleStudents[0].id) : "");
+  }, [isOpen, lesson, eligibleStudents]);
+
+  if (!isOpen || !lesson) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-[2px]">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl border border-gray-200 overflow-hidden">
+        <div className="bg-gradient-to-r from-rose-600 via-rose-500 to-amber-500 px-5 py-4 text-white">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start gap-3 min-w-0">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/20">
+                <Icon icon="solar:lock-password-bold" className="w-6 h-6" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-lg font-bold tracking-tight">Remove manual access</h3>
+                <p className="text-sm text-white/90 mt-1 leading-snug">
+                  Revoke the temporary unlock for{" "}
+                  <span className="font-semibold text-white">{lesson.title}</span>. The student follows normal lesson
+                  rules again unless another unlock is granted.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-white/90 hover:text-white transition-colors shrink-0"
+              aria-label="Close revoke access modal"
+            >
+              <Icon icon="solar:close-circle-bold" className="w-6 h-6" />
+            </button>
+          </div>
+        </div>
+
+        <form
+          className="p-5 space-y-4"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            const studentId = Number(selectedStudentId);
+            if (!studentId) {
+              showErrorToast("Please select a student.");
+              return;
+            }
+            if (!confirmed) {
+              showErrorToast("Confirm that you want to remove this student’s access.");
+              return;
+            }
+            await onSubmit({ studentId });
+          }}
+        >
+          {canMatchByGrade ? (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 p-3">
+              <div className="flex gap-2 text-sm text-rose-900">
+                <Icon icon="solar:danger-triangle-bold" className="w-5 h-5 shrink-0 text-rose-600" />
+                <p>
+                  This ends teacher-granted access immediately. If the lesson is still locked by progression, the
+                  student will not be able to open it until they meet the usual requirements.
+                </p>
+              </div>
+            </div>
+          ) : null}
+
+          {!canMatchByGrade ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+              <p className="text-sm font-semibold text-amber-900">Cannot revoke from this lesson</p>
+              <p className="text-sm text-amber-800 mt-1">
+                This lesson’s subject has no grade assigned, so we cannot match students safely. Fix the subject grade
+                first.
+              </p>
+            </div>
+          ) : eligibleStudents.length === 0 ? (
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <p className="text-sm font-semibold text-gray-900">No matching students</p>
+              <p className="text-sm text-gray-600 mt-1">
+                There are no approved students in <span className="font-semibold">{lesson.grade}</span> in your list.
+              </p>
+            </div>
+          ) : null}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Student <span className="text-gray-400 font-normal">({lesson.grade} only)</span>
+            </label>
+            <select
+              value={selectedStudentId}
+              onChange={(e) => setSelectedStudentId(e.target.value)}
+              disabled={!canMatchByGrade || eligibleStudents.length === 0}
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 text-sm disabled:bg-gray-100 disabled:text-gray-500"
+            >
+              {eligibleStudents.length === 0 ? (
+                <option value="">Select a student…</option>
+              ) : (
+                eligibleStudents.map((student) => (
+                  <option key={student.id} value={student.id}>
+                    {student.profile.name} — {student.grade} ({student.student_id || `ID ${student.id}`})
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
+
+          <label className="flex items-start gap-3 cursor-pointer rounded-xl border border-gray-200 bg-gray-50/80 p-3 hover:bg-gray-50 transition-colors">
+            <input
+              type="checkbox"
+              checked={confirmed}
+              onChange={(e) => setConfirmed(e.target.checked)}
+              className="mt-1 h-4 w-4 rounded border-gray-300 text-rose-600 focus:ring-rose-500"
+            />
+            <span className="text-sm text-gray-700 leading-relaxed">
+              I understand this removes the active manual unlock for the selected student and this lesson.
+            </span>
+          </label>
+
+          <div className="pt-1 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-full sm:w-auto px-4 py-2.5 rounded-lg border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitting || !canMatchByGrade || eligibleStudents.length === 0 || !confirmed}
+              className="w-full sm:w-auto px-4 py-2.5 rounded-lg bg-rose-600 text-white text-sm font-medium hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2 shadow-sm"
+            >
+              {isSubmitting ? (
+                <>
+                  <Icon icon="solar:loading-bold" className="w-4 h-4 animate-spin" />
+                  Revoking…
+                </>
+              ) : (
+                <>
+                  <Icon icon="solar:lock-bold" className="w-4 h-4" />
+                  Revoke access
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function LessonsPage() {
-  const [lessons, setLessons] = useState<TeacherLesson[]>([]);
-  const [subjects, setSubjects] = useState<TeacherSubject[]>([]);
-  const [students, setStudents] = useState<TeacherStudent[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const { data: lessonsBundle, isPending: isLessonsLoading, isError: isLessonsError, error: lessonsError } = useQuery({
+    queryKey: ptQueryKeys.lessonsBundle,
+    queryFn: async () => {
+      const isHeadTeacher = readIsHeadTeacher();
+      const [lessonsData, subjectsData, studentsData] = await Promise.all([
+        isHeadTeacher ? getHeadTeacherLessons() : getTeacherLessons(),
+        isHeadTeacher ? getHeadTeacherSubjects() : getTeacherSubjects(),
+        isHeadTeacher ? getHeadTeacherStudents() : getTeacherStudents(),
+      ]);
+      return {
+        lessons: lessonsData,
+        subjects: subjectsData,
+        students: studentsData,
+      };
+    },
+  });
+
+  useEffect(() => {
+    if (!isLessonsError) return;
+    console.error("Error fetching lessons:", lessonsError);
+    showErrorToast("Failed to load lessons. Please try again.");
+  }, [isLessonsError, lessonsError]);
+
+  const lessons = lessonsBundle?.lessons ?? [];
+  const subjects = lessonsBundle?.subjects ?? [];
+  const students = lessonsBundle?.students ?? [];
   const [search, setSearch] = useState("");
   const [selectedGrade, setSelectedGrade] = useState<string>("All");
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>("All");
@@ -437,40 +700,9 @@ export default function LessonsPage() {
   const [isUnlockModalOpen, setIsUnlockModalOpen] = useState(false);
   const [unlockLessonTarget, setUnlockLessonTarget] = useState<TeacherLessonWithMeta | null>(null);
   const [isUnlocking, setIsUnlocking] = useState(false);
-
-  useEffect(() => {
-    const fetchLessons = async () => {
-      try {
-        setIsLoading(true);
-        const userStr = localStorage.getItem("user");
-        let isHeadTeacher = false;
-        if (userStr) {
-          try {
-            const user = JSON.parse(userStr);
-            isHeadTeacher = user?.role === "HEADTEACHER";
-          } catch {
-            isHeadTeacher = false;
-          }
-        }
-
-        const [lessonsData, subjectsData, studentsData] = await Promise.all([
-          isHeadTeacher ? getHeadTeacherLessons() : getTeacherLessons(),
-          isHeadTeacher ? getHeadTeacherSubjects() : getTeacherSubjects(),
-          getTeacherStudents(),
-        ]);
-        setLessons(lessonsData);
-        setSubjects(subjectsData);
-        setStudents(studentsData);
-      } catch (error) {
-        console.error("Error fetching lessons:", error);
-        showErrorToast("Failed to load lessons. Please try again.");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchLessons();
-  }, []);
+  const [isRevokeModalOpen, setIsRevokeModalOpen] = useState(false);
+  const [revokeLessonTarget, setRevokeLessonTarget] = useState<TeacherLessonWithMeta | null>(null);
+  const [isRevoking, setIsRevoking] = useState(false);
 
   const subjectMap = useMemo(() => {
     return subjects.reduce<Record<number, TeacherSubject>>((acc, subject) => {
@@ -485,7 +717,7 @@ export default function LessonsPage() {
       return {
         ...lesson,
         subjectName: matchedSubject?.name || `Subject #${lesson.subject}`,
-        grade: matchedSubject?.grade || "Unassigned Grade",
+        grade: resolveLessonGrade(lesson, matchedSubject),
       };
     });
   }, [lessons, subjectMap]);
@@ -561,30 +793,7 @@ export default function LessonsPage() {
   };
 
   const handleCreateSuccess = async () => {
-    // Refresh lessons list
-    try {
-      const userStr = localStorage.getItem("user");
-      let isHeadTeacher = false;
-      if (userStr) {
-        try {
-          const user = JSON.parse(userStr);
-          isHeadTeacher = user?.role === "HEADTEACHER";
-        } catch {
-          isHeadTeacher = false;
-        }
-      }
-
-      const [data, subjectsData, studentsData] = await Promise.all([
-        isHeadTeacher ? getHeadTeacherLessons() : getTeacherLessons(),
-        isHeadTeacher ? getHeadTeacherSubjects() : getTeacherSubjects(),
-        getTeacherStudents(),
-      ]);
-      setLessons(data);
-      setSubjects(subjectsData);
-      setStudents(studentsData);
-    } catch (error) {
-      console.error("Error refreshing lessons:", error);
-    }
+    await queryClient.invalidateQueries({ queryKey: ptQueryKeys.lessonsBundle });
   };
 
   const handleOpenUnlock = (lesson: TeacherLessonWithMeta) => {
@@ -592,39 +801,162 @@ export default function LessonsPage() {
     setIsUnlockModalOpen(true);
   };
 
+  const handleOpenRevoke = (lesson: TeacherLessonWithMeta) => {
+    setRevokeLessonTarget(lesson);
+    setIsRevokeModalOpen(true);
+  };
+
   const handleUnlockSubmit = async (payload: { studentId: number; durationHours: number; reason: string }) => {
     if (!unlockLessonTarget) return;
+    const lesson = unlockLessonTarget;
+    if (
+      !lessonHasAssignableGrade(lesson.grade) ||
+      !students.some(
+        (s) =>
+          s.id === payload.studentId &&
+          gradesMatch(lesson.grade, s.grade) &&
+          isApprovedStudentStatus(s.status)
+      )
+    ) {
+      showErrorToast("Choose a student in the same grade as this lesson.");
+      return;
+    }
     try {
       setIsUnlocking(true);
-      const response = await unlockLessonForStudent({
-        student_id: payload.studentId,
+      const studentRecord = students.find((s) => s.id === payload.studentId);
+      const unlockBase = {
         lesson_id: unlockLessonTarget.id,
         duration_hours: payload.durationHours,
         reason: payload.reason,
-      });
+      };
+
+      const callUnlock = async (studentIdForApi: number): Promise<UnlockLessonResponse> => {
+        const body = { ...unlockBase, student_id: studentIdForApi };
+        if (readIsHeadTeacher()) {
+          try {
+            return await unlockHeadTeacherLessonForStudent(body);
+          } catch (err) {
+            if (err instanceof ApiClientError && err.status === 404) {
+              return await unlockLessonForStudent(body);
+            }
+            throw err;
+          }
+        }
+        return await unlockLessonForStudent(body);
+      };
+
+      let response: UnlockLessonResponse;
+      try {
+        response = await callUnlock(payload.studentId);
+      } catch (firstErr) {
+        const looksLikeGradeMismatch =
+          firstErr instanceof ApiClientError &&
+          /lesson grade does not match/i.test(String(firstErr.message));
+        const profileId = studentRecord?.profile?.id;
+        if (
+          looksLikeGradeMismatch &&
+          profileId != null &&
+          profileId !== payload.studentId
+        ) {
+          response = await callUnlock(profileId);
+        } else {
+          throw firstErr;
+        }
+      }
 
       const expiresLabel = response.expires_at ? formatDateTime(response.expires_at) : `${payload.durationHours} hours`;
       showSuccessToast(`Lesson unlocked successfully. Access expires ${expiresLabel}.`);
+
+      await queryClient.invalidateQueries({ queryKey: ptQueryKeys.lessonsBundle });
 
       setIsUnlockModalOpen(false);
       setUnlockLessonTarget(null);
     } catch (error) {
       console.error("Error unlocking lesson:", error);
-      showErrorToast("Failed to unlock lesson. Please try again.");
+      if (error instanceof ApiClientError) {
+        showErrorToast(error.message || "Failed to unlock lesson. Please try again.");
+      } else {
+        showErrorToast("Failed to unlock lesson. Please try again.");
+      }
     } finally {
       setIsUnlocking(false);
     }
   };
 
-  if (isLoading) {
+  const handleRevokeSubmit = async (payload: { studentId: number }) => {
+    if (!revokeLessonTarget) return;
+    const lesson = revokeLessonTarget;
+    if (
+      !lessonHasAssignableGrade(lesson.grade) ||
+      !students.some(
+        (s) =>
+          s.id === payload.studentId &&
+          gradesMatch(lesson.grade, s.grade) &&
+          isApprovedStudentStatus(s.status)
+      )
+    ) {
+      showErrorToast("Choose a student in the same grade as this lesson.");
+      return;
+    }
+    try {
+      setIsRevoking(true);
+      const revokeBase = {
+        lesson_id: revokeLessonTarget.id,
+        student_id: payload.studentId,
+      };
+
+      const callRevoke = async (studentIdForApi: number): Promise<UnlockLessonResponse> => {
+        const body = { ...revokeBase, student_id: studentIdForApi };
+        if (readIsHeadTeacher()) {
+          try {
+            return await revokeHeadTeacherLessonUnlock(body);
+          } catch (err) {
+            if (err instanceof ApiClientError && err.status === 404) {
+              return await revokeTeacherLessonUnlock(body);
+            }
+            throw err;
+          }
+        }
+        return await revokeTeacherLessonUnlock(body);
+      };
+
+      try {
+        await callRevoke(payload.studentId);
+      } catch (firstErr) {
+        const gradeMismatch =
+          firstErr instanceof ApiClientError &&
+          /lesson grade does not match/i.test(String(firstErr.message));
+        const studentRecord = students.find((s) => s.id === payload.studentId);
+        const profileId = studentRecord?.profile?.id;
+        if (gradeMismatch && profileId != null && profileId !== payload.studentId) {
+          await callRevoke(profileId);
+        } else {
+          throw firstErr;
+        }
+      }
+
+      showSuccessToast("Manual access removed. The student no longer has this unlock.");
+
+      await queryClient.invalidateQueries({ queryKey: ptQueryKeys.lessonsBundle });
+
+      setIsRevokeModalOpen(false);
+      setRevokeLessonTarget(null);
+    } catch (error) {
+      console.error("Error revoking lesson unlock:", error);
+      if (error instanceof ApiClientError) {
+        showErrorToast(error.message || "Failed to revoke access. Please try again.");
+      } else {
+        showErrorToast("Failed to revoke access. Please try again.");
+      }
+    } finally {
+      setIsRevoking(false);
+    }
+  };
+
+  if (isLessonsLoading && !lessonsBundle) {
     return (
       <DashboardLayout>
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="text-center">
-            <div className="w-12 h-12 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading lessons...</p>
-          </div>
-        </div>
+        <PortalLoadingOverlay label="Loading lessons…" />
       </DashboardLayout>
     );
   }
@@ -818,8 +1150,9 @@ export default function LessonsPage() {
                           <span className="text-sm text-gray-600">{formatDate(lesson.created_at)}</span>
                         </td>
                         <td className="py-4 px-4">
-                          <div className="flex justify-end gap-2">
+                          <div className="flex justify-end flex-wrap gap-2">
                             <button
+                              type="button"
                               onClick={() => handleOpenUnlock(lesson)}
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition-colors"
                             >
@@ -827,6 +1160,15 @@ export default function LessonsPage() {
                               Unlock
                             </button>
                             <button
+                              type="button"
+                              onClick={() => handleOpenRevoke(lesson)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-rose-700 bg-rose-50 border border-rose-200 rounded-lg hover:bg-rose-100 transition-colors"
+                            >
+                              <Icon icon="solar:lock-bold" className="w-4 h-4" />
+                              Revoke
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => handleView(lesson)}
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors"
                             >
@@ -877,6 +1219,19 @@ export default function LessonsPage() {
           setUnlockLessonTarget(null);
         }}
         onSubmit={handleUnlockSubmit}
+      />
+
+      <RevokeLessonModal
+        isOpen={isRevokeModalOpen}
+        lesson={revokeLessonTarget}
+        students={students}
+        isSubmitting={isRevoking}
+        onClose={() => {
+          if (isRevoking) return;
+          setIsRevokeModalOpen(false);
+          setRevokeLessonTarget(null);
+        }}
+        onSubmit={handleRevokeSubmit}
       />
     </DashboardLayout>
   );

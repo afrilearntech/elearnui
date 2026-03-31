@@ -1,16 +1,19 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Icon } from '@iconify/react';
 import ElementaryNavbar from '@/components/elementary/ElementaryNavbar';
 import ElementarySidebar from '@/components/elementary/ElementarySidebar';
 import StudentLoadingScreen from '@/components/ui/StudentLoadingScreen';
-import { changePassword, getUserProfile, UserProfileResponse } from '@/lib/api/auth';
+import { changePassword, getUserProfile } from '@/lib/api/auth';
 import { showErrorToast, showSuccessToast, formatErrorMessage } from '@/lib/toast';
 import { ApiClientError } from '@/lib/api/client';
 import Spinner from '@/components/ui/Spinner';
 import { useAccessibility } from '@/contexts/AccessibilityContext';
+import { studentQueryKeys } from '@/lib/student/queryKeys';
+import { useStudentAuthReady } from '@/hooks/student/useStudentAuthReady';
 
 const formatDate = (dateString: string | null) => {
   if (!dateString) return "N/A";
@@ -35,11 +38,11 @@ const formatDateTime = (dateString: string) => {
 
 export default function ElementaryProfilePage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const authReady = useStudentAuthReady();
   const { isEnabled, announce } = useAccessibility();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [user, setUser] = useState<any>(null);
-  const [profileData, setProfileData] = useState<UserProfileResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [bootstrapUser, setBootstrapUser] = useState<any>(null);
   const [showPasswordForm, setShowPasswordForm] = useState(false);
   const [passwordData, setPasswordData] = useState({
     current_password: "",
@@ -50,6 +53,22 @@ export default function ElementaryProfilePage() {
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const hasAnnouncedPageRef = useRef(false);
   const currentPasswordInputRef = useRef<HTMLInputElement | null>(null);
+
+  const { data: profileData, isPending, isError, error } = useQuery({
+    queryKey: studentQueryKeys.userProfile,
+    queryFn: async () => {
+      const token = localStorage.getItem('auth_token');
+      if (!token) throw new Error('Missing auth token');
+      return getUserProfile(token);
+    },
+    enabled: authReady,
+  });
+
+  const user = useMemo(
+    () => profileData?.user ?? bootstrapUser,
+    [profileData?.user, bootstrapUser],
+  );
+
   const resolvedSchool = profileData?.student?.school || profileData?.teacher?.school || null;
   const resolvedSchoolName = resolvedSchool?.name || 'Not assigned';
   const resolvedDistrictName = resolvedSchool?.district_name || 'Not assigned';
@@ -67,52 +86,24 @@ export default function ElementaryProfilePage() {
   };
 
   useEffect(() => {
-    let isMounted = true;
+    const storedUser = localStorage.getItem('user');
+    if (!storedUser) return;
+    try {
+      setBootstrapUser(JSON.parse(storedUser));
+    } catch (e) {
+      console.error('Error parsing user data:', e);
+    }
+  }, []);
 
-    const fetchProfile = async () => {
-      const token = localStorage.getItem('auth_token');
-      if (!token) {
-        router.push('/login');
-        return;
-      }
+  useEffect(() => {
+    if (!isError) return;
+    console.error('Profile page error:', error);
+    if (!bootstrapUser) {
+      showErrorToast('Failed to load user profile data.');
+    }
+  }, [isError, error, bootstrapUser]);
 
-      let storedUserData: any = null;
-      const storedUser = localStorage.getItem('user');
-      if (storedUser) {
-        try {
-          storedUserData = JSON.parse(storedUser);
-          if (isMounted) {
-            setUser(storedUserData);
-          }
-        } catch (e) {
-          console.error('Error parsing user data:', e);
-        }
-      }
-
-      try {
-        const profile = await getUserProfile(token);
-        if (!isMounted) return;
-        setProfileData(profile);
-        setUser(profile.user || storedUserData);
-      } catch (error) {
-        if (!isMounted) return;
-        console.error('Error fetching user profile:', error);
-        if (!storedUserData) {
-          showErrorToast('Failed to load user profile data.');
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    fetchProfile();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [router]);
+  const isLoading = !authReady || (isPending && profileData === undefined);
 
   useEffect(() => {
     if (!isEnabled || isLoading || !user || hasAnnouncedPageRef.current) return;
@@ -219,6 +210,7 @@ export default function ElementaryProfilePage() {
       }, token);
 
       showSuccessToast("Password changed successfully!");
+      void queryClient.invalidateQueries({ queryKey: studentQueryKeys.userProfile });
       if (isEnabled) {
         announce('Password changed successfully.', 'polite');
       }

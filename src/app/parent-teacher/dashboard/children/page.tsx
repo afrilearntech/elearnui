@@ -1,36 +1,32 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import DashboardLayout from "@/components/parent-teacher/layout/DashboardLayout";
 import LinkChildModal from "@/components/parent-teacher/dashboard/LinkChildModal";
 import { getMyChildren, MyChild, linkChild, LinkChildResponse } from "@/lib/api/parent-teacher/parent";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
+import { ptQueryKeys } from "@/lib/parent-teacher/queryKeys";
+import { PortalLoadingOverlay } from "@/components/parent-teacher/PortalDataSkeleton";
 
 export default function MyChildrenPage() {
-  const [children, setChildren] = useState<MyChild[]>([]);
+  const queryClient = useQueryClient();
+  const { data: children = [], isPending, isError, error } = useQuery({
+    queryKey: ptQueryKeys.parentMyChildren,
+    queryFn: getMyChildren,
+  });
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLinking, setIsLinking] = useState(false);
 
   useEffect(() => {
-    const fetchChildren = async () => {
-      try {
-        setIsLoading(true);
-        const data = await getMyChildren();
-        setChildren(data);
-      } catch (error) {
-        console.error("Error fetching children:", error);
-        showErrorToast("Failed to load children. Please try again.");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchChildren();
-  }, []);
+    if (!isError) return;
+    console.error("Error fetching children:", error);
+    showErrorToast("Failed to load children. Please try again.");
+  }, [isError, error]);
 
   const handleLinkChild = async (childData: { student_id: number; student_email: string; student_phone: string }) => {
     try {
-      setIsLoading(true);
+      setIsLinking(true);
       const response: LinkChildResponse = await linkChild(childData);
       
       // Map the API response to our local MyChild interface
@@ -43,30 +39,25 @@ export default function MyChildrenPage() {
         created_at: response.created_at,
       };
       
-      setChildren((prev) => [...prev, newChild]);
+      queryClient.setQueryData(ptQueryKeys.parentMyChildren, (old: MyChild[] | undefined) => {
+        if (!old) return [newChild];
+        return [...old, newChild];
+      });
       setIsLinkModalOpen(false);
       showSuccessToast("Child linked successfully!");
-      
-      // Refresh children list to get updated data
-      const data = await getMyChildren();
-      setChildren(data);
+      await queryClient.invalidateQueries({ queryKey: ptQueryKeys.parentMyChildren });
     } catch (error: any) {
       console.error("Error linking child:", error);
       showErrorToast(error?.message || "Failed to link child. Please try again.");
     } finally {
-      setIsLoading(false);
+      setIsLinking(false);
     }
   };
 
-  if (isLoading) {
+  if (isPending && children.length === 0) {
     return (
       <DashboardLayout onLinkChild={() => setIsLinkModalOpen(true)}>
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="text-center">
-            <div className="w-12 h-12 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading children...</p>
-          </div>
-        </div>
+        <PortalLoadingOverlay label="Loading children..." />
       </DashboardLayout>
     );
   }
@@ -204,7 +195,9 @@ export default function MyChildrenPage() {
 
       <LinkChildModal
         isOpen={isLinkModalOpen}
-        onClose={() => setIsLinkModalOpen(false)}
+        onClose={() => {
+          if (!isLinking) setIsLinkModalOpen(false);
+        }}
         onLink={handleLinkChild}
       />
     </DashboardLayout>

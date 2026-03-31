@@ -1,17 +1,23 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Icon } from '@iconify/react';
 import ElementaryNavbar from '@/components/elementary/ElementaryNavbar';
 import ElementarySidebar from '@/components/elementary/ElementarySidebar';
-import { getLessonById, LessonDetail, markLessonTaken, getAllLessons, LessonListItem } from '@/lib/api/lessons';
+import { getLessonById, markLessonTaken, getAllLessons } from '@/lib/api/lessons';
 import { ApiClientError } from '@/lib/api/client';
 import { showErrorToast, formatErrorMessage } from '@/lib/toast';
 import StudentLoadingScreen from '@/components/ui/StudentLoadingScreen';
+import LessonQuizModal from '@/components/elementary/LessonQuizModal';
 import { useAccessibility } from '@/contexts/AccessibilityContext';
+import { handleSequentialSeeked, handleSequentialTimeUpdate } from '@/lib/elementary/sequentialMediaPlayback';
+import { studentQueryKeys } from '@/lib/student/queryKeys';
+import { useStudentAuthReady } from '@/hooks/student/useStudentAuthReady';
+import { buildLessonPageBundle } from '@/lib/student/buildLessonPageBundle';
 
 function VideoThumbnail({ 
   thumbnail, 
@@ -47,30 +53,52 @@ export default function SubjectLessonDetail() {
   const router = useRouter();
   const params = useParams();
   const lessonId = params?.id as string;
+  const authReady = useStudentAuthReady();
   const { isEnabled, announce } = useAccessibility();
+  const tabInitForLessonRef = useRef<string | null>(null);
   
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const handleMenuToggle = () => setIsMobileMenuOpen(!isMobileMenuOpen);
   const handleMenuClose = () => setIsMobileMenuOpen(false);
   const [activeResourceTab, setActiveResourceTab] = useState<'video' | 'audio' | 'pdf' | 'ppt' | 'doc'>('video');
   const [isResourceOpen, setIsResourceOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [lesson, setLesson] = useState<LessonDetail | null>(null);
   const [studentId, setStudentId] = useState<number | null>(null);
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [hasRecordedProgress, setHasRecordedProgress] = useState(false);
   const [isRecordingProgress, setIsRecordingProgress] = useState(false);
-  const [allLessons, setAllLessons] = useState<LessonListItem[]>([]);
-  const [nextLessonId, setNextLessonId] = useState<number | null>(null);
-  const [availableResources, setAvailableResources] = useState<{
-    video?: string;
-    audio?: string;
-    pdf?: string;
-    ppt?: string;
-    doc?: string;
-  }>({});
+  const [isQuizOpen, setIsQuizOpen] = useState(false);
+
+  const { data: lessonQueryData, isPending, isError, error } = useQuery({
+    queryKey: studentQueryKeys.lessonDetail(lessonId ?? ''),
+    queryFn: async () => {
+      const token = localStorage.getItem('auth_token');
+      if (!token) throw new Error('Missing auth token');
+      const [lessonData, allLessonsData] = await Promise.all([
+        getLessonById(lessonId!, token),
+        getAllLessons(token),
+      ]);
+      return { lessonData, allLessonsData };
+    },
+    enabled: authReady && !!lessonId,
+  });
+
+  const bundle = useMemo(() => {
+    if (!lessonQueryData?.lessonData || !lessonId) return null;
+    return buildLessonPageBundle(lessonQueryData.lessonData, lessonQueryData.allLessonsData, lessonId);
+  }, [lessonQueryData, lessonId]);
+
+  const lesson = bundle?.lesson ?? null;
+  const availableResources = bundle?.availableResources ?? {};
+  const allLessons = bundle?.allLessons ?? [];
+  const nextLessonId = bundle?.nextLessonId ?? null;
+
+  const isLoading = !authReady || (isPending && lessonQueryData === undefined);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const videoFurthestWatchedRef = useRef(0);
+  const audioFurthestWatchedRef = useRef(0);
+  const videoLastKnownTimeRef = useRef(0);
+  const audioLastKnownTimeRef = useRef(0);
   const hasAnnouncedPageRef = useRef(false);
   
   const fallbackVideoSources = [
@@ -156,6 +184,13 @@ export default function SubjectLessonDetail() {
   }, [lessonId]);
 
   useEffect(() => {
+    videoFurthestWatchedRef.current = 0;
+    audioFurthestWatchedRef.current = 0;
+    videoLastKnownTimeRef.current = 0;
+    audioLastKnownTimeRef.current = 0;
+  }, [lessonId, availableResources.video, availableResources.audio]);
+
+  useEffect(() => {
     // Get student ID from localStorage (stored during login)
     // This is the actual student ID, not the profile ID
     const storedStudentId = localStorage.getItem('student_id');
@@ -172,96 +207,37 @@ export default function SubjectLessonDetail() {
   }, []);
 
   useEffect(() => {
-    const fetchLessonData = async () => {
-      if (!lessonId) {
-        router.push('/subjects');
-        return;
-      }
-
-      const token = localStorage.getItem('auth_token');
-      if (!token) {
-        router.push('/login');
-        return;
-      }
-      setAuthToken(token);
-
-      setIsLoading(true);
-      try {
-        // Fetch current lesson and all lessons in parallel
-        const [lessonData, allLessonsData] = await Promise.all([
-          getLessonById(lessonId, token),
-          getAllLessons(token)
-        ]);
-        
-        setLesson(lessonData);
-        
-        const resources: { video?: string; audio?: string; pdf?: string; ppt?: string; doc?: string } = {};
-        const lessonType = lessonData.type?.toUpperCase()?.trim() || '';
-        
-        if (lessonData.resource) {
-          if (lessonType === 'VIDEO') {
-            resources.video = lessonData.resource;
-          } else if (lessonType === 'AUDIO') {
-            resources.audio = lessonData.resource;
-          } else if (lessonType === 'PDF') {
-            resources.pdf = lessonData.resource;
-          } else if (lessonType === 'PPT' || lessonType === 'POWERPOINT') {
-            resources.ppt = lessonData.resource;
-          } else if (lessonType === 'DOC' || lessonType === 'DOCX' || lessonType === 'DOCUMENT') {
-            resources.doc = lessonData.resource;
-          }
-        }
-        
-        const sameTitleLessons = allLessonsData.filter(
-          l => l.status === 'APPROVED' && 
-          l.title.toLowerCase().trim() === lessonData.title.toLowerCase().trim() &&
-          l.id !== lessonData.id
-        );
-        
-        sameTitleLessons.forEach(l => {
-          const type = l.type?.toUpperCase()?.trim() || '';
-          if (l.resource) {
-            if (type === 'VIDEO' && !resources.video) resources.video = l.resource;
-            else if (type === 'AUDIO' && !resources.audio) resources.audio = l.resource;
-            else if (type === 'PDF' && !resources.pdf) resources.pdf = l.resource;
-            else if ((type === 'PPT' || type === 'POWERPOINT') && !resources.ppt) resources.ppt = l.resource;
-            else if ((type === 'DOC' || type === 'DOCX' || type === 'DOCUMENT') && !resources.doc) resources.doc = l.resource;
-          }
-        });
-        
-        setAvailableResources(resources);
-        
-        const firstAvailable = Object.keys(resources)[0] as 'video' | 'audio' | 'pdf' | 'ppt' | 'doc' | undefined;
-        if (firstAvailable) {
-          setActiveResourceTab(firstAvailable);
-        }
-        
-        const approvedLessons = allLessonsData
-          .filter(l => l.status === 'APPROVED')
-          .sort((a, b) => a.id - b.id);
-        
-        setAllLessons(approvedLessons);
-        
-        const currentIndex = approvedLessons.findIndex(l => l.id === parseInt(lessonId));
-        if (currentIndex >= 0 && currentIndex < approvedLessons.length - 1) {
-          setNextLessonId(approvedLessons[currentIndex + 1].id);
-        } else {
-          setNextLessonId(null);
-        }
-      } catch (error) {
-        const errorMessage = error instanceof ApiClientError
-          ? error.message
-          : error instanceof Error
-          ? error.message
-          : 'Failed to load lesson';
-        showErrorToast(formatErrorMessage(errorMessage));
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchLessonData();
+    if (!lessonId) {
+      router.push('/subjects');
+    }
   }, [lessonId, router]);
+
+  useEffect(() => {
+    if (!authReady) return;
+    setAuthToken(localStorage.getItem('auth_token'));
+  }, [authReady]);
+
+  useEffect(() => {
+    if (!bundle?.firstResourceTab || !lessonId) return;
+    if (tabInitForLessonRef.current === lessonId) return;
+    tabInitForLessonRef.current = lessonId;
+    setActiveResourceTab(bundle.firstResourceTab);
+  }, [lessonId, bundle?.firstResourceTab]);
+
+  useEffect(() => {
+    setHasRecordedProgress(false);
+  }, [lessonId]);
+
+  useEffect(() => {
+    if (!isError) return;
+    console.error('Lesson page error:', error);
+    const errorMessage = error instanceof ApiClientError
+      ? error.message
+      : error instanceof Error
+      ? error.message
+      : 'Failed to load lesson';
+    showErrorToast(formatErrorMessage(errorMessage));
+  }, [isError, error]);
 
   useEffect(() => {
     if (!isEnabled || isLoading || !lesson || hasAnnouncedPageRef.current) return;
@@ -292,6 +268,12 @@ export default function SubjectLessonDetail() {
         return;
       }
 
+      if (isQuizOpen) {
+        setIsQuizOpen(false);
+        announce('Quiz closed.', 'polite');
+        return;
+      }
+
       if (isResourceOpen) {
         setIsResourceOpen(false);
         announce('Resource closed.', 'polite');
@@ -300,7 +282,7 @@ export default function SubjectLessonDetail() {
 
     window.addEventListener('keydown', handleEscape);
     return () => window.removeEventListener('keydown', handleEscape);
-  }, [isMobileMenuOpen, isResourceOpen, announce]);
+  }, [isMobileMenuOpen, isResourceOpen, isQuizOpen, announce]);
 
   const handleMediaProgress = async () => {
     if (
@@ -342,6 +324,28 @@ export default function SubjectLessonDetail() {
         setIsRecordingProgress(false);
       }
     }
+  };
+
+  const onVideoTimeUpdate = () => {
+    const el = videoRef.current;
+    if (el) handleSequentialTimeUpdate(el, videoFurthestWatchedRef, videoLastKnownTimeRef);
+    void handleMediaProgress();
+  };
+
+  const onAudioTimeUpdate = () => {
+    const el = audioRef.current;
+    if (el) handleSequentialTimeUpdate(el, audioFurthestWatchedRef, audioLastKnownTimeRef);
+    void handleMediaProgress();
+  };
+
+  const onVideoSeeked = () => {
+    const el = videoRef.current;
+    if (el) handleSequentialSeeked(el, videoFurthestWatchedRef, videoLastKnownTimeRef);
+  };
+
+  const onAudioSeeked = () => {
+    const el = audioRef.current;
+    if (el) handleSequentialSeeked(el, audioFurthestWatchedRef, audioLastKnownTimeRef);
   };
 
   if (isLoading) {
@@ -449,12 +453,16 @@ export default function SubjectLessonDetail() {
             <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6 mt-6 sm:mx-8 mx-4">
               <div>
                 <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-                  <div className={`px-6 py-3 bg-linear-to-r ${currentTypeInfo.color} text-white`} style={{ fontFamily: 'Andika, sans-serif' }}>
-                    <div className="flex items-center gap-2 mb-1">
-                      <Icon icon={currentTypeInfo.icon} width={20} height={20} />
-                      <div className="text-[16px] font-semibold">{currentTypeInfo.headerTitle}</div>
+                  <div className="relative overflow-hidden px-6 py-3 text-white shadow-[inset_0_-12px_24px_-8px_rgba(0,0,0,0.18)]" style={{ fontFamily: 'Andika, sans-serif' }}>
+                    <div className={`absolute inset-0 bg-linear-to-r ${currentTypeInfo.color}`} aria-hidden />
+                    <div className="absolute inset-0 bg-black/20 pointer-events-none" aria-hidden />
+                    <div className="relative z-10 [text-shadow:0_1px_3px_rgba(0,0,0,0.45)]">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Icon icon={currentTypeInfo.icon} width={20} height={20} className="drop-shadow-sm" />
+                        <div className="text-[16px] font-semibold">{currentTypeInfo.headerTitle}</div>
+                      </div>
+                      <div className="text-[12px] opacity-95">{currentTypeInfo.headerSubtitle}</div>
                     </div>
-                    <div className="text-[12px] opacity-90">{currentTypeInfo.headerSubtitle}</div>
                   </div>
                   
                   {hasMultipleResources && (
@@ -579,37 +587,66 @@ export default function SubjectLessonDetail() {
                   }`}>
                     {isResourceOpen ? (
                       activeResourceTab === 'video' && availableResources.video ? (
-                        <video
-                          ref={videoRef}
-                          className="w-full h-full object-cover"
-                          src={availableResources.video}
-                          controls
-                          autoPlay
-                          aria-label={`Video player for ${lesson.title}`}
-                          onTimeUpdate={handleMediaProgress}
-                          onError={(e) => {
-                            const currentSrc = (e.target as HTMLVideoElement).src;
-                            if (availableResources.video && currentSrc === availableResources.video) {
-                              (e.target as HTMLVideoElement).src = fallbackVideoSources[0];
-                            }
-                          }}
-                        />
+                        <div className="flex h-full w-full min-h-0 flex-col">
+                          <div
+                            className="relative min-h-0 flex-1 select-none"
+                            onContextMenu={(e) => e.preventDefault()}
+                            onDragStart={(e) => e.preventDefault()}
+                          >
+                            <video
+                              ref={videoRef}
+                              className="absolute inset-0 h-full w-full object-cover"
+                              src={availableResources.video}
+                              controls
+                              controlsList="nodownload noremoteplayback"
+                              disablePictureInPicture
+                              playsInline
+                              draggable={false}
+                              autoPlay
+                              preload="metadata"
+                              aria-label={`Video player for ${lesson.title}`}
+                              onTimeUpdate={onVideoTimeUpdate}
+                              onSeeked={onVideoSeeked}
+                              onDragStart={(e) => e.preventDefault()}
+                              onError={(e) => {
+                                const currentSrc = (e.target as HTMLVideoElement).src;
+                                if (availableResources.video && currentSrc === availableResources.video) {
+                                  (e.target as HTMLVideoElement).src = fallbackVideoSources[0];
+                                }
+                              }}
+                            />
+                          </div>
+                          <p className="shrink-0 border-t border-gray-200/80 bg-gray-100 px-2 py-1.5 text-center text-[11px] text-gray-600 sm:text-xs" style={{ fontFamily: 'Andika, sans-serif' }}>
+                            You can pause and go back, but you can&apos;t skip ahead without watching up to that time.
+                          </p>
+                        </div>
                       ) : activeResourceTab === 'audio' && availableResources.audio ? (
                         <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-purple-50 to-indigo-50 p-6">
                           <div className="w-24 h-24 bg-purple-500 rounded-full flex items-center justify-center mb-6 shadow-lg">
                             <Icon icon="mdi:headphones" width={48} height={48} className="text-white" />
                           </div>
+                          <div
+                            className="w-full max-w-md select-none"
+                            onContextMenu={(e) => e.preventDefault()}
+                            onDragStart={(e) => e.preventDefault()}
+                          >
                           <audio
                             ref={audioRef}
-                            className="w-full max-w-md"
+                            className="w-full"
                             src={availableResources.audio}
                             controls
+                            controlsList="nodownload noremoteplayback"
+                            draggable={false}
                             autoPlay
+                            preload="metadata"
                             aria-label={`Audio player for ${lesson.title}`}
-                            onTimeUpdate={handleMediaProgress}
+                            onTimeUpdate={onAudioTimeUpdate}
+                            onSeeked={onAudioSeeked}
+                            onDragStart={(e) => e.preventDefault()}
                           />
-                          <p className="text-sm text-gray-600 mt-4 text-center" style={{ fontFamily: 'Andika, sans-serif' }}>
-                            Listen to the audio lesson
+                          </div>
+                          <p className="text-sm text-gray-600 mt-4 text-center max-w-md" style={{ fontFamily: 'Andika, sans-serif' }}>
+                            You can pause and go back, but you can&apos;t skip ahead without listening up to that time.
                           </p>
                         </div>
                       ) : activeResourceTab === 'pdf' && availableResources.pdf ? (
@@ -731,6 +768,10 @@ export default function SubjectLessonDetail() {
                           fallbackSrc={fallbackThumbnail}
                           alt={lesson?.title || 'Lesson thumbnail'}
                         />
+                        <div
+                          className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 via-black/10 to-black/20"
+                          aria-hidden
+                        />
                         <div className="absolute inset-0 flex items-center justify-center">
                           <button
                             type="button"
@@ -794,12 +835,19 @@ export default function SubjectLessonDetail() {
                         </button>
                       )}
                       <button
-                        onClick={() => router.push('/assessments')}
-                        aria-label="Go to assessments"
+                        type="button"
+                        onClick={() => {
+                          if (!authToken) {
+                            router.push('/login');
+                            return;
+                          }
+                          setIsQuizOpen(true);
+                        }}
+                        aria-label="Open lesson quiz on this page"
                         className="flex-1 h-10 rounded-lg bg-linear-to-r from-[#FB923C] to-[#EF4444] text-white text-xs sm:text-sm flex items-center justify-center gap-2 hover:opacity-90 transition-opacity"
                         style={{ fontFamily: 'Andika, sans-serif' }}
                       >
-                        <Icon icon="mdi:clipboard-text" /> Try Quiz
+                        <Icon icon="mdi:clipboard-text" /> Take Quiz
                       </button>
                     </div>
                   </div>
@@ -856,6 +904,16 @@ export default function SubjectLessonDetail() {
           </div>
         </main>
       </div>
+
+      {lesson && authToken ? (
+        <LessonQuizModal
+          open={isQuizOpen}
+          onClose={() => setIsQuizOpen(false)}
+          lessonContentId={lesson.id}
+          lessonTitle={lesson.title}
+          token={authToken}
+        />
+      ) : null}
     </div>
   );
 }

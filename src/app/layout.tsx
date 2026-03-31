@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Andika } from "next/font/google";
 import { Toaster } from "react-hot-toast";
 import { AccessibilityProvider } from "@/contexts/AccessibilityContext";
+import AppProviders from "@/components/providers/AppProviders";
 import SkipLinks from "@/components/accessibility/SkipLinks";
 import KeyboardShortcutsHelp from "@/components/accessibility/KeyboardShortcutsHelp";
 import { GlobalKeyboardNavigation } from "@/components/accessibility/GlobalKeyboardNavigation";
@@ -74,11 +75,13 @@ export default function RootLayout({
         style={{ fontFamily: 'Andika, sans-serif' }}
       >
         <AccessibilityProvider>
-          <GlobalKeyboardNavigation />
-          <SkipLinks />
-          <KeyboardShortcutsHelp />
-          <StartPrompt />
-          {children}
+          <AppProviders>
+            <GlobalKeyboardNavigation />
+            <SkipLinks />
+            <KeyboardShortcutsHelp />
+            <StartPrompt />
+            {children}
+          </AppProviders>
         </AccessibilityProvider>
         <Toaster
           position="top-right"

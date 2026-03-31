@@ -1,13 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Icon } from '@iconify/react';
 import Image from 'next/image';
 import Link from 'next/link';
 import ElementaryNavbar from '@/components/elementary/ElementaryNavbar';
 import ElementarySidebar from '@/components/elementary/ElementarySidebar';
-import { getKidsAssessments, KidsAssessment } from '@/lib/api/dashboard';
+import { getKidsAssessments } from '@/lib/api/dashboard';
 import { 
   submitSolution, 
   SubmitSolutionRequest,
@@ -21,49 +22,71 @@ import Spinner from '@/components/ui/Spinner';
 import StudentLoadingScreen from '@/components/ui/StudentLoadingScreen';
 import { useAccessibility } from '@/contexts/AccessibilityContext';
 import { useAutoRead } from '@/hooks/useAutoRead';
+import { isAssessmentLocked } from '@/lib/elementary/lessonQuizUtils';
+import { studentQueryKeys } from '@/lib/student/queryKeys';
+import { useStudentAuthReady } from '@/hooks/student/useStudentAuthReady';
 
-// Check if assessment is locked
-const isAssessmentLocked = (assessmentId: number, allAssessments: KidsAssessment[]): boolean => {
-  if (typeof window === 'undefined') return false;
-  
-  const assessment = allAssessments.find(a => a.id === assessmentId);
-  if (!assessment || assessment.type !== 'lesson' || !assessment.lesson_id) {
-    return false; // General assessments are never locked
-  }
-  
-  // Find all lesson assessments and sort by lesson_id
-  const lessonAssessments = allAssessments
-    .filter(a => a.type === 'lesson' && a.lesson_id)
-    .sort((a, b) => (a.lesson_id || 0) - (b.lesson_id || 0));
-  
-  const currentIndex = lessonAssessments.findIndex(a => a.id === assessmentId);
-  if (currentIndex === 0) {
-    return false; // First lesson assessment is always unlocked
-  }
-  
-  // Check if previous assessment is completed
-  const previousAssessment = lessonAssessments[currentIndex - 1];
-  const previousCompleted = localStorage.getItem(`assessment_completed_${previousAssessment.id}`) === 'true';
-  
-  return !previousCompleted;
-};
+type AssignmentLoadCode = 'NOT_FOUND' | 'LOCKED' | 'NO_QUESTIONS';
+
+function assignmentLoadError(code: AssignmentLoadCode, message?: string) {
+  const e = new Error(message ?? code) as Error & { code: AssignmentLoadCode };
+  e.code = code;
+  return e;
+}
 
 export default function AssignmentDetailPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const params = useParams();
   const assignmentId = params?.id as string;
+  const authReady = useStudentAuthReady();
   const { isEnabled, announce, playSound } = useAccessibility();
   
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [assessment, setAssessment] = useState<KidsAssessment | null>(null);
-  const [assessmentData, setAssessmentData] = useState<AssessmentQuestionsResponse | null>(null);
-  const [shuffledQuestions, setShuffledQuestions] = useState<AssessmentQuestion[]>([]);
   const [sessionId, setSessionId] = useState<number | null>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string>>({});
-  const [isLoadingQuestions, setIsLoadingQuestions] = useState(false);
+  const announcedLoadRef = useRef<string | null>(null);
+
+  const { data, isPending, isError, error } = useQuery({
+    queryKey: studentQueryKeys.assignmentDetail(assignmentId ?? ''),
+    queryFn: async () => {
+      const token = localStorage.getItem('auth_token');
+      if (!token) throw new Error('Missing auth token');
+      const kidsData = await getKidsAssessments(token);
+      const foundAssessment = kidsData.assessments.find(
+        (a) => a.id.toString() === assignmentId,
+      );
+      if (!foundAssessment) throw assignmentLoadError('NOT_FOUND');
+      const locked = isAssessmentLocked(foundAssessment.id, kidsData.assessments);
+      if (locked) throw assignmentLoadError('LOCKED');
+      const paramsQ: { general_id?: number; lesson_id?: number } =
+        foundAssessment.type === 'general'
+          ? { general_id: foundAssessment.id }
+          : { lesson_id: foundAssessment.id };
+      const questionsData = await getAssessmentQuestions(paramsQ, token);
+      if (!questionsData.questions.length) throw assignmentLoadError('NO_QUESTIONS');
+      return {
+        assessment: foundAssessment,
+        questionsData,
+      };
+    },
+    enabled: authReady && !!assignmentId,
+    retry: false,
+  });
+
+  const assessment = data?.assessment ?? null;
+  const assessmentData = data?.questionsData ?? null;
+
+  const shuffledQuestions = useMemo(() => {
+    if (!assessmentData?.questions?.length || sessionId === null) return [];
+    return shuffleQuestions(assessmentData.questions, sessionId);
+  }, [assessmentData, sessionId]);
+
+  const isLoading = !authReady || (isPending && data === undefined);
+  const isPreparingQuiz =
+    Boolean(assessmentData?.questions?.length) && sessionId === null && !isLoading;
 
   // Seeded random number generator for consistent shuffling
   const seededRandom = (seed: number) => {
@@ -102,99 +125,62 @@ export default function AssignmentDetailPage() {
 
 
   useEffect(() => {
-    const fetchAssessment = async () => {
-      if (!assignmentId) {
-        router.push('/assessments');
-        return;
-      }
-
-      const token = localStorage.getItem('auth_token');
-      if (!token) {
-        router.push('/login');
-        return;
-      }
-
-      setIsLoading(true);
-      try {
-        const data = await getKidsAssessments(token);
-        const foundAssessment = data.assessments.find(
-          (a) => a.id.toString() === assignmentId
-        );
-        
-        if (!foundAssessment) {
-          showErrorToast('Assessment not found');
-          router.push('/assessments');
-          return;
-        }
-        
-        // Check if assessment is locked
-        const locked = isAssessmentLocked(foundAssessment.id, data.assessments);
-        if (locked) {
-          showErrorToast('🔒 This quiz is locked! Complete the previous lesson quiz first.');
-          router.push('/assessments');
-          return;
-        }
-        
-        setAssessment(foundAssessment);
-        
-        setIsLoadingQuestions(true);
-        try {
-          const params: { general_id?: number; lesson_id?: number } = {};
-          if (foundAssessment.type === 'general') {
-            params.general_id = foundAssessment.id;
-          } else {
-            params.lesson_id = foundAssessment.id;
-          }
-          
-          const questionsData = await getAssessmentQuestions(params, token);
-          setAssessmentData(questionsData);
-          
-          // Generate session ID for this attempt (timestamp-based)
-          const newSessionId = Date.now();
-          setSessionId(newSessionId);
-          
-          // Shuffle questions if there are any
-          if (questionsData.questions.length > 0) {
-            const shuffled = shuffleQuestions(questionsData.questions, newSessionId);
-            setShuffledQuestions(shuffled);
-            
-            // Auto-read assessment info
-            const assessmentContent = `Assessment loaded: ${questionsData.assessment.title}. ` +
-              `${shuffled.length} questions total. ` +
-              `Question types may include multiple choice, true or false, short answer, and essay. ` +
-              `Use Arrow keys to navigate options, Enter to select, N for next question, P for previous, S to submit when ready.`;
-            
-            if (isEnabled) {
-              setTimeout(() => {
-                announce(assessmentContent, 'polite');
-              }, 500);
-            }
-          } else {
-            showErrorToast('This assessment has no questions yet.');
-            router.push('/assessments');
-            return;
-          }
-        } catch (error) {
-          console.error('Failed to load questions:', error);
-          setShuffledQuestions([]);
-        } finally {
-          setIsLoadingQuestions(false);
-        }
-      } catch (error) {
-        const errorMessage = error instanceof ApiClientError
-          ? error.message
-          : error instanceof Error
-          ? error.message
-          : 'Failed to load assessment';
-        showErrorToast(formatErrorMessage(errorMessage));
-        router.push('/assessments');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchAssessment();
+    if (!assignmentId) {
+      router.push('/assessments');
+    }
   }, [assignmentId, router]);
+
+  useLayoutEffect(() => {
+    if (!assessmentData?.questions?.length) {
+      setSessionId(null);
+      return;
+    }
+    setSessionId(Date.now());
+    setCurrentQuestionIndex(0);
+    setAnswers({});
+  }, [assessmentData, assignmentId]);
+
+  useEffect(() => {
+    if (!isEnabled || shuffledQuestions.length === 0 || !assessmentData || sessionId === null) return;
+    const key = `${assignmentId}-${sessionId}`;
+    if (announcedLoadRef.current === key) return;
+    announcedLoadRef.current = key;
+    const assessmentContent =
+      `Assessment loaded: ${assessmentData.assessment.title}. ` +
+      `${shuffledQuestions.length} questions total. ` +
+      `Question types may include multiple choice, true or false, short answer, and essay. ` +
+      `Use Arrow keys to navigate options, Enter to select, N for next question, P for previous, S to submit when ready.`;
+    const t = setTimeout(() => announce(assessmentContent, 'polite'), 500);
+    return () => clearTimeout(t);
+  }, [isEnabled, shuffledQuestions.length, assessmentData, announce, assignmentId, sessionId]);
+
+  useEffect(() => {
+    if (!isError || !error) return;
+    const code = (error as Error & { code?: AssignmentLoadCode }).code;
+    if (code === 'LOCKED') {
+      showErrorToast('🔒 This quiz is locked! Complete the previous lesson quiz first.');
+      router.push('/assessments');
+      return;
+    }
+    if (code === 'NOT_FOUND') {
+      showErrorToast('Assessment not found');
+      router.push('/assessments');
+      return;
+    }
+    if (code === 'NO_QUESTIONS') {
+      showErrorToast('This assessment has no questions yet.');
+      router.push('/assessments');
+      return;
+    }
+    console.error('Assignment detail error:', error);
+    const errorMessage = error instanceof ApiClientError
+      ? error.message
+      : error instanceof Error
+      ? error.message
+      : 'Failed to load assessment';
+    showErrorToast(formatErrorMessage(errorMessage));
+    router.push('/assessments');
+  }, [isError, error, router]);
 
 
   const handleAnswerChange = (questionId: number, answer: string) => {
@@ -242,11 +228,11 @@ export default function AssignmentDetailPage() {
     }
   };
 
-  const handleSubmitAssessment = async () => {
+  const handleSubmitAssessment = useCallback(async () => {
     if (shuffledQuestions.length === 0) return;
 
     const unansweredQuestions = shuffledQuestions.filter(
-      q => !answers[q.id] || answers[q.id].trim() === ''
+      (q) => !answers[q.id] || answers[q.id].trim() === '',
     );
 
     if (unansweredQuestions.length > 0) {
@@ -262,7 +248,6 @@ export default function AssignmentDetailPage() {
 
     setIsSubmitting(true);
     try {
-      // Format solution using shuffled questions order
       const formattedSolution = shuffledQuestions
         .map((q, index) => {
           const answerText = answers[q.id] || '';
@@ -277,27 +262,28 @@ export default function AssignmentDetailPage() {
       };
 
       await submitSolution(submitData, token);
-      
-      // Mark assessment as completed in localStorage
+
       if (assessment) {
         localStorage.setItem(`assessment_completed_${assessment.id}`, 'true');
       }
-      
+
+      void queryClient.invalidateQueries({ queryKey: studentQueryKeys.kidsAssessments });
+
       showSuccessToast('🎉 Assessment submitted successfully! Great job! ⭐');
       setTimeout(() => {
         router.push('/assessments');
       }, 2000);
-    } catch (error) {
-      const errorMessage = error instanceof ApiClientError
-        ? error.message
-        : error instanceof Error
-        ? error.message
+    } catch (err) {
+      const errorMessage = err instanceof ApiClientError
+        ? err.message
+        : err instanceof Error
+        ? err.message
         : 'Failed to submit assessment';
       showErrorToast(formatErrorMessage(errorMessage));
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [assessment, answers, queryClient, router, shuffledQuestions]);
 
 
   const currentQuestion = shuffledQuestions[currentQuestionIndex];
@@ -438,7 +424,7 @@ export default function AssignmentDetailPage() {
               </div>
             </div>
 
-            {isLoadingQuestions ? (
+            {isPreparingQuiz ? (
               <div className="sm:mx-8 mx-4">
                 <div className="bg-white rounded-2xl shadow-lg p-12 border-2 border-[#E5E7EB] flex items-center justify-center">
                   <Spinner size="lg" />

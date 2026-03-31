@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
 import { Icon } from '@iconify/react';
 import ElementaryNavbar from '@/components/elementary/ElementaryNavbar';
 import ElementarySidebar from '@/components/elementary/ElementarySidebar';
@@ -16,16 +17,61 @@ import { getUserProfile, UserProfileResponse } from '@/lib/api/auth';
 import { ApiClientError } from '@/lib/api/client';
 import { showErrorToast, formatErrorMessage } from '@/lib/toast';
 import { useAccessibility } from '@/contexts/AccessibilityContext';
+import { studentQueryKeys } from '@/lib/student/queryKeys';
+import { useStudentAuthReady } from '@/hooks/student/useStudentAuthReady';
 
 export default function ElementaryDashboard() {
   const router = useRouter();
   const { isEnabled, announce } = useAccessibility();
+  const authReady = useStudentAuthReady();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [dashboardData, setDashboardData] = useState<any>(null);
-  const [user, setUser] = useState<any>(null);
-  const [profileData, setProfileData] = useState<UserProfileResponse | null>(null);
+  const [bootstrapUser, setBootstrapUser] = useState<any>(null);
   const hasAnnouncedPageRef = useRef(false);
+
+  useEffect(() => {
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+      try {
+        setBootstrapUser(JSON.parse(storedUser));
+      } catch (e) {
+        console.error('Error parsing user data:', e);
+      }
+    }
+  }, []);
+
+  const { data, isPending, isError, error } = useQuery({
+    queryKey: studentQueryKeys.elementaryDashboard,
+    queryFn: async () => {
+      const token = localStorage.getItem('auth_token');
+      if (!token) throw new Error('Missing auth token');
+      const [dash, profile] = await Promise.all([
+        getElementaryDashboard(token),
+        getUserProfile(token).catch(() => null),
+      ]);
+      return { dashboard: dash, profile };
+    },
+    enabled: authReady,
+  });
+
+  const dashboardData = data?.dashboard;
+  const profileData = data?.profile ?? null;
+  const user = useMemo(
+    () => profileData?.user ?? bootstrapUser,
+    [profileData?.user, bootstrapUser],
+  );
+
+  useEffect(() => {
+    if (!isError) return;
+    console.error('Elementary dashboard error:', error);
+    const errorMessage = error instanceof ApiClientError
+      ? error.message
+      : error instanceof Error
+      ? error.message
+      : 'Failed to load dashboard data';
+    showErrorToast(formatErrorMessage(errorMessage));
+  }, [isError, error]);
+
+  const isLoading = !authReady || (isPending && data === undefined);
 
   const safeName = user?.name || 'Student';
   const lessonCount = dashboardData?.lessons_completed || 0;
@@ -46,49 +92,6 @@ export default function ElementaryDashboard() {
     );
   }, [isEnabled, isLoading, safeName, lessonCount, points, streak, level, announce]);
 
-  useEffect(() => {
-    const fetchDashboardData = async () => {
-      const token = localStorage.getItem('auth_token');
-      if (!token) {
-        router.push('/login');
-        return;
-      }
-
-      const storedUser = localStorage.getItem('user');
-      if (storedUser) {
-        try {
-          setUser(JSON.parse(storedUser));
-        } catch (e) {
-          console.error('Error parsing user data:', e);
-        }
-      }
-
-      setIsLoading(true);
-      try {
-        const [data, profile] = await Promise.all([
-          getElementaryDashboard(token),
-          getUserProfile(token).catch(() => null),
-        ]);
-        setDashboardData(data);
-        if (profile) {
-          setProfileData(profile);
-          setUser((prev: any) => profile.user || prev);
-        }
-      } catch (error) {
-        const errorMessage = error instanceof ApiClientError
-          ? error.message
-          : error instanceof Error
-          ? error.message
-          : 'Failed to load dashboard data';
-        showErrorToast(formatErrorMessage(errorMessage));
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchDashboardData();
-  }, [router]);
-
   const handleMenuToggle = () => {
     setIsMobileMenuOpen(!isMobileMenuOpen);
   };
@@ -99,6 +102,26 @@ export default function ElementaryDashboard() {
 
   if (isLoading) {
     return <StudentLoadingScreen title="Loading your magical dashboard..." subtitle="Getting your lessons, stars, and adventures ready." />;
+  }
+
+  if (!dashboardData) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-2 p-6">
+        <p className="text-gray-800 font-semibold" style={{ fontFamily: 'Andika, sans-serif' }}>
+          We couldn&apos;t load your dashboard.
+        </p>
+        <p className="text-sm text-gray-600 text-center max-w-md" style={{ fontFamily: 'Andika, sans-serif' }}>
+          Check your connection and try again, or go back to login.
+        </p>
+        <button
+          type="button"
+          onClick={() => router.push('/login')}
+          className="mt-2 rounded-full bg-emerald-600 px-5 py-2 text-white text-sm hover:bg-emerald-700"
+        >
+          Back to login
+        </button>
+      </div>
+    );
   }
 
   return (

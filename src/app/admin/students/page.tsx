@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import DashboardLayout from "@/components/admin/layout/DashboardLayout";
 import { Icon } from "@iconify/react";
 import Image from "next/image";
@@ -9,6 +10,7 @@ import { getAdminStudents, AdminStudent, approveAdminStudent, rejectAdminStudent
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
 import { ApiClientError } from "@/lib/api/client";
 import AddUserModal from "@/components/admin/users/AddUserModal";
+import { ptQueryKeys } from "@/lib/parent-teacher/queryKeys";
 
 type StudentStatus = "Active" | "Inactive" | "Creator" | "APPROVED" | "PENDING" | "REJECTED";
 
@@ -23,6 +25,28 @@ type Student = {
   status: StudentStatus;
   avatar?: string;
 };
+
+const mapStatus = (status: string): StudentStatus => {
+  const upperStatus = status.toUpperCase();
+  if (upperStatus === "APPROVED") return "APPROVED";
+  if (upperStatus === "PENDING") return "PENDING";
+  if (upperStatus === "REJECTED") return "REJECTED";
+  // Fallback for old status values
+  if (upperStatus === "ACTIVE" || upperStatus === "CREATOR") return "APPROVED";
+  return "PENDING";
+};
+
+const mapAdminStudents = (data: AdminStudent[]): Student[] =>
+  data.map((student) => ({
+    id: `${student.id}`,
+    apiId: student.id,
+    name: student.name,
+    school: student.school,
+    email: student.email,
+    linkedParent: student.linked_parents || "N/A",
+    gradeLevel: student.grade,
+    status: mapStatus(student.status),
+  }));
 
 const getUniqueGrades = (students: Student[]): string[] => {
   const gradesSet = new Set<string>(["All"]);
@@ -46,8 +70,12 @@ const getUniqueSchools = (students: Student[]): string[] => {
 
 
 export default function StudentsPage() {
-  const [students, setStudents] = useState<Student[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const { data, isPending, isError, error } = useQuery({
+    queryKey: ptQueryKeys.adminStudents,
+    queryFn: getAdminStudents,
+  });
+  const students = useMemo(() => mapAdminStudents(data ?? []), [data]);
   const [search, setSearch] = useState("");
   const [selectedGrade, setSelectedGrade] = useState("All");
   const [selectedSchool, setSelectedSchool] = useState("All");
@@ -59,10 +87,6 @@ export default function StudentsPage() {
   const [addUserTab, setAddUserTab] = useState<"single" | "bulk">("single");
   const pageSize = 10;
 
-  useEffect(() => {
-    fetchStudents();
-  }, []);
-
   const [approvingStudentId, setApprovingStudentId] = useState<string | null>(null);
   const [rejectingStudentId, setRejectingStudentId] = useState<string | null>(null);
   const [showRejectModal, setShowRejectModal] = useState(false);
@@ -70,51 +94,15 @@ export default function StudentsPage() {
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [selectedStudentForDetails, setSelectedStudentForDetails] = useState<Student | null>(null);
 
-  const fetchStudents = async () => {
-    try {
-      setIsLoading(true);
-      const data = await getAdminStudents();
-      // Map API data to Student type
-      const mappedStudents: Student[] = data.map((student) => ({
-        id: `${student.id}`, // Use API ID as string for React key
-        apiId: student.id, // Store the actual API ID (number) for approve/reject operations
-        name: student.name,
-        school: student.school,
-        email: student.email,
-        linkedParent: student.linked_parents || "N/A",
-        gradeLevel: student.grade,
-        status: mapStatus(student.status),
-      }));
-      setStudents(mappedStudents);
-    } catch (error) {
-      console.error("Error fetching students:", error);
-      if (error instanceof ApiClientError) {
-        showErrorToast(error.message || "Failed to fetch students");
-      } else {
-        showErrorToast("An unexpected error occurred while fetching students");
-      }
-    } finally {
-      setIsLoading(false);
+  useEffect(() => {
+    if (!isError) return;
+    console.error("Error fetching students:", error);
+    if (error instanceof ApiClientError) {
+      showErrorToast(error.message || "Failed to fetch students");
+    } else {
+      showErrorToast("An unexpected error occurred while fetching students");
     }
-  };
-
-  const mapStatus = (status: string): StudentStatus => {
-    const upperStatus = status.toUpperCase();
-    if (upperStatus === "APPROVED") {
-      return "APPROVED";
-    }
-    if (upperStatus === "PENDING") {
-      return "PENDING";
-    }
-    if (upperStatus === "REJECTED") {
-      return "REJECTED";
-    }
-    // Fallback for old status values
-    if (upperStatus === "ACTIVE" || upperStatus === "CREATOR") {
-      return "APPROVED";
-    }
-    return "PENDING";
-  };
+  }, [isError, error]);
 
   const handleApproveStudent = async (student: Student) => {
     if (!student.apiId) {
@@ -126,7 +114,7 @@ export default function StudentsPage() {
       setApprovingStudentId(student.id);
       await approveAdminStudent(student.apiId);
       showSuccessToast(`${student.name} has been approved successfully!`);
-      await fetchStudents(); // Refresh the list
+      await queryClient.invalidateQueries({ queryKey: ptQueryKeys.adminStudents });
     } catch (error) {
       console.error("Error approving student:", error);
       if (error instanceof ApiClientError) {
@@ -158,7 +146,7 @@ export default function StudentsPage() {
       setRejectingStudentId(studentToReject.id);
       await rejectAdminStudent(studentToReject.apiId);
       showSuccessToast(`${studentToReject.name} has been rejected.`);
-      await fetchStudents(); // Refresh the list
+      await queryClient.invalidateQueries({ queryKey: ptQueryKeys.adminStudents });
       setShowRejectModal(false);
       setStudentToReject(null);
     } catch (error) {
@@ -353,7 +341,7 @@ export default function StudentsPage() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {isLoading ? (
+                {isPending && data === undefined ? (
                   <tr>
                     <td colSpan={7} className="px-4 sm:px-6 py-8 text-center text-gray-500">
                       <div className="flex items-center justify-center gap-2">
@@ -520,7 +508,7 @@ export default function StudentsPage() {
             setAddUserTab("single");
           }}
           onSuccess={() => {
-            fetchStudents();
+            void queryClient.invalidateQueries({ queryKey: ptQueryKeys.adminStudents });
           }}
         />
       )}

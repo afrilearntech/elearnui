@@ -25,6 +25,7 @@ export default function Navbar({ onMenuClick, userRole, onLinkChild }: NavbarPro
     if (pathname.startsWith("/parent-teacher/dashboard/headteacher")) return "Head Teacher Dashboard";
     if (pathname.startsWith("/parent-teacher/dashboard/teacher")) return "Teacher Dashboard";
     if (pathname.startsWith("/parent-teacher/dashboard/children")) return "My Children";
+    if (pathname.startsWith("/parent-teacher/dashboard/leaderboard")) return "Leaderboard";
     if (pathname.startsWith("/parent-teacher/dashboard/grades")) return "Grades";
     if (pathname.startsWith("/parent-teacher/dashboard/assessments")) return "Assessments";
     if (pathname.startsWith("/parent-teacher/dashboard/submissions")) return "Submissions";

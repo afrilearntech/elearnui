@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { Icon } from "@iconify/react";
 import DashboardLayout from "@/components/parent-teacher/layout/DashboardLayout";
@@ -12,6 +13,8 @@ import { getUserProfile } from "@/lib/api/auth";
 import { showErrorToast } from "@/lib/toast";
 import AddTeacherModal from "@/components/parent-teacher/teacher/AddTeacherModal";
 import BulkUploadTeachersModal from "@/components/parent-teacher/teacher/BulkUploadTeachersModal";
+import { ptQueryKeys } from "@/lib/parent-teacher/queryKeys";
+import { PortalLoadingOverlay } from "@/components/parent-teacher/PortalDataSkeleton";
 
 const formatDate = (dateString: string) => {
   const date = new Date(dateString);
@@ -30,31 +33,22 @@ const statusColor = (status: string) => {
   return "bg-gray-100 text-gray-700 border-gray-200";
 };
 
+type HeadTeachersQueryData = {
+  teachers: TeacherRecord[];
+  schoolId: number | null;
+};
+
 export default function HeadTeacherTeachersPage() {
   const router = useRouter();
-  const [teachers, setTeachers] = useState<TeacherRecord[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const [authReady, setAuthReady] = useState(false);
   const [search, setSearch] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("All");
   const [selectedTeacher, setSelectedTeacher] = useState<TeacherRecord | null>(null);
-  const [schoolId, setSchoolId] = useState<number | null>(null);
   const [isAddTeacherModalOpen, setIsAddTeacherModalOpen] = useState(false);
   const [isBulkUploadModalOpen, setIsBulkUploadModalOpen] = useState(false);
 
-  const refreshTeachers = async () => {
-    try {
-      setIsLoading(true);
-      const data = await getHeadTeacherTeachers();
-      setTeachers(data);
-    } catch (error) {
-      console.error("Error fetching teachers:", error);
-      showErrorToast("Failed to load teachers. Please try again.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
+  useLayoutEffect(() => {
     const userStr = localStorage.getItem("user");
     if (!userStr) {
       router.push("/parent-teacher/sign-in/teacher");
@@ -72,19 +66,35 @@ export default function HeadTeacherTeachersPage() {
       return;
     }
 
-    const boot = async () => {
-      await refreshTeachers();
-      const token = localStorage.getItem("auth_token");
-      if (token) {
-        const profile = await getUserProfile(token).catch(() => null);
-        if (profile?.teacher?.school_id) {
-          setSchoolId(profile.teacher.school_id);
-        }
-      }
-    };
-
-    boot();
+    setAuthReady(true);
   }, [router]);
+
+  const { data: teachersQuery, isPending, isError, error } = useQuery({
+    queryKey: ptQueryKeys.headTeacherTeachers,
+    queryFn: async (): Promise<HeadTeachersQueryData> => {
+      const token = localStorage.getItem("auth_token");
+      const [teachersData, profile] = await Promise.all([
+        getHeadTeacherTeachers(),
+        token ? getUserProfile(token).catch(() => null) : Promise.resolve(null),
+      ]);
+      return {
+        teachers: teachersData,
+        schoolId: profile?.teacher?.school_id ?? null,
+      };
+    },
+    enabled: authReady,
+  });
+
+  const teachers = teachersQuery?.teachers ?? [];
+  const schoolId = teachersQuery?.schoolId ?? null;
+
+  useEffect(() => {
+    if (!isError) return;
+    console.error("Error fetching teachers:", error);
+    showErrorToast("Failed to load teachers. Please try again.");
+  }, [isError, error]);
+
+  const refreshTeachers = () => queryClient.invalidateQueries({ queryKey: ptQueryKeys.headTeacherTeachers });
 
   const statuses = useMemo(
     () => ["All", ...Array.from(new Set(teachers.map((teacher) => teacher.status))).sort()],
@@ -106,15 +116,10 @@ export default function HeadTeacherTeachersPage() {
     });
   }, [teachers, search, selectedStatus]);
 
-  if (isLoading) {
+  if (!authReady || (isPending && !teachersQuery)) {
     return (
       <DashboardLayout>
-        <div className="flex items-center justify-center min-h-[420px]">
-          <div className="text-center">
-            <Icon icon="solar:loading-bold" className="w-9 h-9 text-indigo-600 animate-spin mx-auto mb-2" />
-            <p className="text-gray-600">Loading school teachers...</p>
-          </div>
-        </div>
+        <PortalLoadingOverlay label="Loading school teachers…" />
       </DashboardLayout>
     );
   }

@@ -859,6 +859,11 @@ export interface TeacherLesson {
   duration_minutes: number;
   created_at: string;
   updated_at: string;
+  grade?: string | null;
+  subject_grade?: string | null;
+  topic_grade?: string | null;
+  period_grade?: string | null;
+  subject_detail?: { grade?: string | null };
 }
 
 export async function getTeacherLessons(): Promise<TeacherLesson[]> {
@@ -888,6 +893,38 @@ export interface UnlockLessonResponse {
 
 export async function unlockLessonForStudent(payload: UnlockLessonRequest): Promise<UnlockLessonResponse> {
   return await apiRequest<UnlockLessonResponse>('/teacher/unlock-lesson/', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function unlockHeadTeacherLessonForStudent(
+  payload: UnlockLessonRequest
+): Promise<UnlockLessonResponse> {
+  return await apiRequest<UnlockLessonResponse>('/headteacher/unlock-lesson/', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export interface RevokeLessonUnlockRequest {
+  student_id: number;
+  lesson_id: number;
+}
+
+export async function revokeTeacherLessonUnlock(
+  payload: RevokeLessonUnlockRequest
+): Promise<UnlockLessonResponse> {
+  return await apiRequest<UnlockLessonResponse>('/teacher/revoke-lesson-unlock/', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function revokeHeadTeacherLessonUnlock(
+  payload: RevokeLessonUnlockRequest
+): Promise<UnlockLessonResponse> {
+  return await apiRequest<UnlockLessonResponse>('/headteacher/revoke-lesson-unlock/', {
     method: 'POST',
     body: JSON.stringify(payload),
   });

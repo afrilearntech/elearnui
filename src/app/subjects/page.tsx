@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Icon } from '@iconify/react';
@@ -13,6 +13,8 @@ import { showErrorToast, formatErrorMessage } from '@/lib/toast';
 import StudentLoadingScreen from '@/components/ui/StudentLoadingScreen';
 import { useAccessibility } from '@/contexts/AccessibilityContext';
 import { usePageAccessibility } from '@/hooks/usePageAccessibility';
+import { studentQueryKeys } from '@/lib/student/queryKeys';
+import { useStudentAuthReady } from '@/hooks/student/useStudentAuthReady';
 
 type SubjectMediaTab = 'video' | 'audio' | 'file';
 
@@ -234,12 +236,35 @@ function getLessonProgressState(lesson: any) {
 }
 
 export default function SubjectsLessonsPage() {
-  const router = useRouter();
   const { isEnabled, announce } = useAccessibility();
+  const authReady = useStudentAuthReady();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [lessons, setLessons] = useState<any[]>([]);
-  const [subjects, setSubjects] = useState<any[]>([]);
+  const subjectInitRef = useRef(false);
+  const { data, isPending, isError, error } = useQuery({
+    queryKey: studentQueryKeys.subjectsLessons,
+    queryFn: async () => {
+      const token = localStorage.getItem('auth_token');
+      if (!token) throw new Error('Missing auth token');
+      return getElementarySubjectsAndLessons(token);
+    },
+    enabled: authReady,
+  });
+
+  const subjects = data?.subjects ?? [];
+  const lessons = useMemo(
+    () =>
+      (data?.lessons || []).map((lesson) => ({
+        ...lesson,
+        id: lesson.id,
+        title: lesson.title,
+        subject_id: lesson.subject_id,
+        subject_name: lesson.subject_name || `Subject ${lesson.subject_id}`,
+        type: lesson.resource_type || 'VIDEO',
+        resource_type: lesson.resource_type || 'VIDEO',
+      })),
+    [data?.lessons],
+  );
+
   const [selectedSubject, setSelectedSubject] = useState<string>('');
   const [selectedMediaTab, setSelectedMediaTab] = useState<SubjectMediaTab>('video');
   const [searchQuery, setSearchQuery] = useState('');
@@ -254,58 +279,30 @@ export default function SubjectsLessonsPage() {
   }, [isEnabled, announce]);
 
   useEffect(() => {
-    const fetchData = async () => {
-      const token = localStorage.getItem('auth_token');
-      if (!token) {
-        router.push('/login');
-        return;
-      }
+    if (!subjects.length || subjectInitRef.current) return;
+    subjectInitRef.current = true;
+    const urlParams = new URLSearchParams(window.location.search);
+    const subjectIdParam = urlParams.get('subjectId');
+    if (subjectIdParam && subjects.some((s) => s.id.toString() === subjectIdParam)) {
+      setSelectedSubject(subjectIdParam);
+    } else {
+      const firstSubject = [...subjects].sort((a, b) => a.name.localeCompare(b.name))[0];
+      setSelectedSubject(firstSubject.id.toString());
+    }
+  }, [subjects]);
 
-      setIsLoading(true);
-      try {
-        // Fetch subjects and lessons from the elementary endpoint
-        const data = await getElementarySubjectsAndLessons(token);
-        
-        // Use subjects directly from the API response
-        const subjectsData = data.subjects || [];
-        
-        // Use lessons directly from the API response (they already have subject_name, subject_id, resource_type, etc.)
-        const lessonsData = (data.lessons || []).map(lesson => ({
-          ...lesson,
-          id: lesson.id,
-          title: lesson.title,
-          subject_id: lesson.subject_id,
-          subject_name: lesson.subject_name || `Subject ${lesson.subject_id}`,
-          type: lesson.resource_type || 'VIDEO', // Use resource_type from API
-          resource_type: lesson.resource_type || 'VIDEO',
-        }));
-        
-        setSubjects(subjectsData);
-        setLessons(lessonsData);
+  useEffect(() => {
+    if (!isError) return;
+    console.error('Subjects page error:', error);
+    const errorMessage = error instanceof ApiClientError
+      ? error.message
+      : error instanceof Error
+      ? error.message
+      : 'Failed to load lessons';
+    showErrorToast(formatErrorMessage(errorMessage));
+  }, [isError, error]);
 
-        const urlParams = new URLSearchParams(window.location.search);
-        const subjectIdParam = urlParams.get('subjectId');
-        if (subjectIdParam && subjectsData.some((s: any) => s.id.toString() === subjectIdParam)) {
-          setSelectedSubject(subjectIdParam);
-        } else if (subjectsData.length > 0) {
-          // Default to first subject (alphabetical list shown below) for cleaner UX.
-          const firstSubject = [...subjectsData].sort((a, b) => a.name.localeCompare(b.name))[0];
-          setSelectedSubject(firstSubject.id.toString());
-        }
-      } catch (error) {
-        const errorMessage = error instanceof ApiClientError
-          ? error.message
-          : error instanceof Error
-          ? error.message
-          : 'Failed to load lessons';
-        showErrorToast(formatErrorMessage(errorMessage));
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [router]);
+  const isLoading = !authReady || (isPending && data === undefined);
 
   const handleMenuToggle = () => setIsMobileMenuOpen(!isMobileMenuOpen);
   const handleMenuClose = () => setIsMobileMenuOpen(false);

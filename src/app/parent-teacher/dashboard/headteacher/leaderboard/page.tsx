@@ -1,26 +1,25 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { Icon } from "@iconify/react";
 import DashboardLayout from "@/components/parent-teacher/layout/DashboardLayout";
-import {
-  getHeadTeacherLeaderboard,
-  HeadTeacherLeaderboard,
-} from "@/lib/api/parent-teacher/teacher";
+import { getHeadTeacherLeaderboard } from "@/lib/api/parent-teacher/teacher";
 import { showErrorToast } from "@/lib/toast";
+import { ptQueryKeys } from "@/lib/parent-teacher/queryKeys";
+import { PortalLoadingOverlay } from "@/components/parent-teacher/PortalDataSkeleton";
 
 const pageSize = 12;
 
 export default function HeadTeacherLeaderboardPage() {
   const router = useRouter();
-  const [isLoading, setIsLoading] = useState(true);
-  const [leaderboardData, setLeaderboardData] = useState<HeadTeacherLeaderboard | null>(null);
+  const [authReady, setAuthReady] = useState(false);
   const [search, setSearch] = useState("");
   const [selectedGrade, setSelectedGrade] = useState("All");
   const [page, setPage] = useState(1);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const userStr = localStorage.getItem("user");
     if (!userStr) {
       router.push("/parent-teacher/sign-in/teacher");
@@ -38,21 +37,20 @@ export default function HeadTeacherLeaderboardPage() {
       return;
     }
 
-    const fetchLeaderboard = async () => {
-      try {
-        setIsLoading(true);
-        const data = await getHeadTeacherLeaderboard();
-        setLeaderboardData(data);
-      } catch (error) {
-        console.error("Error fetching headteacher leaderboard:", error);
-        showErrorToast("Failed to load leaderboard. Please try again.");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchLeaderboard();
+    setAuthReady(true);
   }, [router]);
+
+  const { data: leaderboardData, isPending, isError, error } = useQuery({
+    queryKey: ptQueryKeys.headTeacherLeaderboard,
+    queryFn: getHeadTeacherLeaderboard,
+    enabled: authReady,
+  });
+
+  useEffect(() => {
+    if (!isError) return;
+    console.error("Error fetching headteacher leaderboard:", error);
+    showErrorToast("Failed to load leaderboard. Please try again.");
+  }, [isError, error]);
 
   const rows = useMemo(() => leaderboardData?.leaderboard ?? [], [leaderboardData]);
 
@@ -98,15 +96,10 @@ export default function HeadTeacherLeaderboardPage() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  if (isLoading) {
+  if (!authReady || (isPending && !leaderboardData)) {
     return (
       <DashboardLayout>
-        <div className="flex items-center justify-center min-h-[420px]">
-          <div className="text-center">
-            <Icon icon="solar:loading-bold" className="w-9 h-9 text-indigo-600 animate-spin mx-auto mb-2" />
-            <p className="text-gray-600">Loading school leaderboard...</p>
-          </div>
-        </div>
+        <PortalLoadingOverlay label="Loading school leaderboard…" />
       </DashboardLayout>
     );
   }

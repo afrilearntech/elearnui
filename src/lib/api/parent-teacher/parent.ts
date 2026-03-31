@@ -150,3 +150,60 @@ export async function getParentAnalytics(childId?: string | null): Promise<Paren
   return await apiRequest<ParentAnalyticsResponse>(endpoint);
 }
 
+export type ParentLeaderboardTimeframe = "this_week" | "this_month" | "all_time";
+
+export interface ParentLeaderboardChildInfo {
+  student_db_id: number;
+  student_id: string;
+  student_name: string;
+  grade: string;
+}
+
+export interface ParentLeaderboardScope {
+  kind: string;
+  timeframe: string;
+  school_id: number;
+  school_name: string;
+  grades: string[];
+  grade: string;
+  county_id: number;
+  district_id: number;
+}
+
+export interface ParentLeaderboardContextRow {
+  rank: number;
+  student_db_id: number;
+  student_id: string;
+  student_name: string;
+  grade: string;
+  points: number;
+  current_login_streak: number;
+  school_id: number;
+  school_name: string;
+  district_id: number;
+  district_name: string;
+  county_id: number;
+  county_name: string;
+}
+
+export interface ParentLeaderboardChildEntry {
+  child: ParentLeaderboardChildInfo;
+  scope: ParentLeaderboardScope;
+  rank: number;
+  total_students: number;
+  points: number;
+  current_login_streak: number;
+  leaderboard_context: ParentLeaderboardContextRow[];
+}
+
+export interface ParentLeaderboardResponse {
+  timeframe: string;
+  children: ParentLeaderboardChildEntry[];
+}
+
+export async function getParentLeaderboard(
+  timeframe: ParentLeaderboardTimeframe = "all_time"
+): Promise<ParentLeaderboardResponse> {
+  const params = new URLSearchParams({ timeframe });
+  return await apiRequest<ParentLeaderboardResponse>(`/parent/leaderboard/?${params.toString()}`);
+}
