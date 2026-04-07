@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getGames, GameRecord } from "@/lib/api/content/games";
 import { moderateContent, ModerateAction } from "@/lib/api/content/lessons";
-import Image from "next/image";
+import Image from "@/components/images/SafeImage";
 
 type GameRow = {
   id: string;
@@ -494,7 +494,6 @@ export default function GamesPage() {
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {filtered.map((game) => {
-                const isExternalImage = game.image ? game.image.startsWith("http") : false;
                 return (
                   <button
                     key={game.id}
@@ -510,7 +509,6 @@ export default function GamesPage() {
                           fill
                           className="object-cover"
                           sizes="(min-width: 1024px) 33vw, 100vw"
-                          unoptimized={isExternalImage}
                         />
                       ) : (
                         <div className="flex h-full w-full items-center justify-center text-sm text-gray-400">No image</div>

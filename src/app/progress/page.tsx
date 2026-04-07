@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import ElementaryNavbar from '@/components/elementary/ElementaryNavbar';
 import ElementarySidebar from '@/components/elementary/ElementarySidebar';
 import { Icon } from '@iconify/react';
-import Image from 'next/image';
+import Image from '@/components/images/SafeImage';
 import { getProgressGarden } from '@/lib/api/dashboard';
 import { ApiClientError } from '@/lib/api/client';
 import { showErrorToast, formatErrorMessage } from '@/lib/toast';

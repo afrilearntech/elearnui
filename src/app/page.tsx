@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import Image from 'next/image';
+import Image from '@/components/images/SafeImage';
 import { Icon } from '@iconify/react';
 import Link from 'next/link';
 import { useAccessibility } from '@/contexts/AccessibilityContext';

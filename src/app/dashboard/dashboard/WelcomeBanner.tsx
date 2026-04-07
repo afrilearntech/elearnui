@@ -2,7 +2,7 @@
 
 import Card from '@/components/ui/Card';
 import { Icon } from '@iconify/react';
-import Image from 'next/image';
+import Image from '@/components/images/SafeImage';
 
 interface WelcomeBannerProps {
   userName?: string;

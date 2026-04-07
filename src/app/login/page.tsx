@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Icon } from '@iconify/react';
-import Image from 'next/image';
+import Image from '@/components/images/SafeImage';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { studentLogin } from '@/lib/api/auth';

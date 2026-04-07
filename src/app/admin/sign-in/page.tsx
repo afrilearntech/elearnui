@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
+import Image from "@/components/images/SafeImage";
 import { adminLogin } from "@/lib/api/admin/auth";
 import { ApiClientError } from "@/lib/api/client";
 import { showSuccessToast, showErrorToast, formatErrorMessage } from "@/lib/toast";

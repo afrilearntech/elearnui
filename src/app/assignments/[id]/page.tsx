@@ -4,7 +4,6 @@ import { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } fr
 import { useRouter, useParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Icon } from '@iconify/react';
-import Image from 'next/image';
 import Link from 'next/link';
 import ElementaryNavbar from '@/components/elementary/ElementaryNavbar';
 import ElementarySidebar from '@/components/elementary/ElementarySidebar';

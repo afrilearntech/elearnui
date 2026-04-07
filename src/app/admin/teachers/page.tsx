@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import DashboardLayout from "@/components/admin/layout/DashboardLayout";
 import { Icon } from "@iconify/react";
-import Image from "next/image";
+import Image from "@/components/images/SafeImage";
 import { getTeachers, TeacherRecord, TeacherStatus, approveAdminTeacher, rejectAdminTeacher } from "@/lib/api/admin/teachers";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
 import { ApiClientError } from "@/lib/api/client";

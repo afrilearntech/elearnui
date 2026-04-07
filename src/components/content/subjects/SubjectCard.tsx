@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import Image from "@/components/images/SafeImage";
 import React from "react";
 
 export type SubjectStatus = "APPROVED" | "PENDING" | "DRAFT" | "REJECTED";

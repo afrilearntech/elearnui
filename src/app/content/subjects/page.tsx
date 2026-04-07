@@ -3,7 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
+import Image from "@/components/images/SafeImage";
 import { Icon } from "@iconify/react";
 import { getSubjects, deleteSubject, SubjectRecord } from "@/lib/api/content/subjects";
 import { moderateContent, ModerateAction } from "@/lib/api/content/lessons";

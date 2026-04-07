@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import DashboardLayout from "@/components/admin/layout/DashboardLayout";
 import { Icon } from "@iconify/react";
-import Image from "next/image";
+import Image from "@/components/images/SafeImage";
 import { Game, GameStatus, getGames } from "@/lib/api/admin/games";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
 import { moderateContent } from "@/lib/api/admin/moderate";

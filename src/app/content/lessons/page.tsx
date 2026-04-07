@@ -7,7 +7,7 @@ import {
   moderateContent,
   ModerateAction,
 } from "@/lib/api/content/lessons";
-import Image from "next/image";
+import Image from "@/components/images/SafeImage";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import React from "react";

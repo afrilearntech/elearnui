@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import DashboardLayout from "@/components/admin/layout/DashboardLayout";
 import { Icon } from "@iconify/react";
-import Image from "next/image";
+import Image from "@/components/images/SafeImage";
 import Link from "next/link";
 
 type ContentManagerRole = "Creator" | "Validator";

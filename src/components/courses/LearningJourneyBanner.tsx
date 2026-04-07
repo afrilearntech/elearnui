@@ -1,4 +1,4 @@
-import Image from 'next/image';
+import Image from '@/components/images/SafeImage';
 
 interface LearningJourneyBannerProps {
   title?: string;

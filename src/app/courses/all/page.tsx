@@ -1,7 +1,7 @@
 "use client";
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
-import Image from 'next/image';
+import Image from '@/components/images/SafeImage';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';

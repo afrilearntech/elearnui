@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import DashboardLayout from "@/components/admin/layout/DashboardLayout";
 import { Icon } from "@iconify/react";
-import Image from "next/image";
+import Image from "@/components/images/SafeImage";
 import { Subject, SubjectStatus, getSubjects, updateSubject } from "@/lib/api/admin/subjects";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
 import AssignSubjectToTeacherModal from "@/components/admin/subjects/AssignSubjectToTeacherModal";

@@ -4,7 +4,7 @@ import React, { useState, useMemo, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import DashboardLayout from "@/components/admin/layout/DashboardLayout";
 import { Icon } from "@iconify/react";
-import Image from "next/image";
+import Image from "@/components/images/SafeImage";
 import Link from "next/link";
 import { getAdminStudents, AdminStudent, approveAdminStudent, rejectAdminStudent } from "@/lib/api/admin/students";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";

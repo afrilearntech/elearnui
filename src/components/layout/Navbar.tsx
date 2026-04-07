@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Image from 'next/image';
+import Image from '@/components/images/SafeImage';
 import Link from 'next/link';
 import { Icon } from '@iconify/react';
 
