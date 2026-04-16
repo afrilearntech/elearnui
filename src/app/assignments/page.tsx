@@ -31,6 +31,8 @@ interface AssessmentCard extends KidsAssessment {
   due_at: string;
   status: string;
   instructions: string;
+  category: 'lesson' | 'general' | 'form' | 'assignment' | 'ai';
+  isPlayable: boolean;
 }
 
 const calculateDaysUntilDue = (dueDateString: string): number => {
@@ -96,6 +98,22 @@ const getStatusConfig = (assessment: KidsAssessment, isLocked: boolean = false) 
   };
 };
 
+const resolveAssessmentCategory = (
+  assessment: KidsAssessment,
+): 'lesson' | 'general' | 'form' | 'assignment' | 'ai' => {
+  const type = String(assessment.type || '').toLowerCase();
+  const isAi = Boolean(assessment.ai_recommended || assessment.is_targeted);
+  if (isAi) return 'ai';
+
+  if (type.includes('assignment')) return 'assignment';
+
+  const isFormType = type.includes('form') || Boolean(assessment.is_form_assessment);
+  if (isFormType) return 'form';
+
+  if (type.includes('lesson') || Boolean(assessment.lesson_id)) return 'lesson';
+  return 'general';
+};
+
 const getSubjectIcon = (assignmentType: string, title: string): string => {
   const type = assignmentType.toLowerCase();
   const name = title.toLowerCase();
@@ -143,6 +161,9 @@ export default function MyAssignmentsPage() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const hasAnnouncedPageRef = useRef(false);
   const [filter, setFilter] = useState<'all' | 'pending' | 'due_soon' | 'overdue' | 'submitted'>('all');
+  const [assessmentTab, setAssessmentTab] = useState<
+    'all' | 'lesson' | 'general' | 'form' | 'assignment' | 'ai'
+  >('all');
 
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: studentQueryKeys.kidsAssessments,
@@ -182,12 +203,14 @@ export default function MyAssignmentsPage() {
       return { assessments: [] as AssessmentCard[], stats: emptyStats };
     }
 
-    const assessmentsWithQuestions = (data.assessments || []).filter(
-      (assessment) => assessment.has_questions !== false,
-    );
+    const sourceAssessments = data.assessments || [];
 
-    const lessonAssessments = assessmentsWithQuestions.filter((a) => a.type === 'lesson' && a.lesson_id);
-    const generalAssessments = assessmentsWithQuestions.filter((a) => a.type === 'general' || !a.lesson_id);
+    const lessonAssessments = sourceAssessments.filter(
+      (a) => resolveAssessmentCategory(a) === 'lesson' && a.lesson_id,
+    );
+    const nonLessonAssessments = sourceAssessments.filter(
+      (a) => resolveAssessmentCategory(a) !== 'lesson',
+    );
 
     lessonAssessments.sort((a, b) => (a.lesson_id || 0) - (b.lesson_id || 0));
 
@@ -203,12 +226,26 @@ export default function MyAssignmentsPage() {
       return { ...assessment, ...config };
     });
 
-    const generalAssessmentsWithStatus = generalAssessments.map((assessment) => {
+    const generalAssessmentsWithStatus = nonLessonAssessments.map((assessment) => {
       const config = getStatusConfig(assessment, false);
-      return { ...assessment, ...config };
+      const category = resolveAssessmentCategory(assessment);
+      const isPlayable =
+        !config.isLocked &&
+        assessment.has_questions !== false &&
+        (category === 'lesson' || category === 'general');
+      return { ...assessment, ...config, category, isPlayable };
     });
 
-    const assessmentsWithStatus = [...lessonAssessmentsWithLocks, ...generalAssessmentsWithStatus];
+    const lessonAssessmentsWithCategory = lessonAssessmentsWithLocks.map((assessment) => {
+      const category = resolveAssessmentCategory(assessment);
+      const isPlayable =
+        !assessment.isLocked &&
+        assessment.has_questions !== false &&
+        (category === 'lesson' || category === 'general');
+      return { ...assessment, category, isPlayable };
+    });
+
+    const assessmentsWithStatus = [...lessonAssessmentsWithCategory, ...generalAssessmentsWithStatus];
 
     const statsData = {
       total: assessmentsWithStatus.length,
@@ -245,6 +282,19 @@ export default function MyAssignmentsPage() {
     : filter === 'submitted'
     ? assessments.filter((assessment) => assessment.isSubmitted)
     : assessments.filter((assessment) => !assessment.isSubmitted && assessment.displayStatus === filter);
+
+  const hasAssignmentAssessments = assessments.some((assessment) => assessment.category === 'assignment');
+
+  const tabFilteredAssessments =
+    assessmentTab === 'all'
+      ? filteredAssessments
+      : filteredAssessments.filter((assessment) => assessment.category === assessmentTab);
+
+  useEffect(() => {
+    if (assessmentTab === 'assignment' && !hasAssignmentAssessments) {
+      setAssessmentTab('all');
+    }
+  }, [assessmentTab, hasAssignmentAssessments]);
 
   if (isLoading) {
     return <StudentLoadingScreen title="Loading assessments..." subtitle="Fetching your latest tasks and due dates." />;
@@ -318,6 +368,43 @@ export default function MyAssignmentsPage() {
             </div>
 
             {/* Filter Buttons */}
+            <div className="sm:mx-8 mx-4 mb-4">
+              <div className="inline-flex max-w-full flex-wrap items-center gap-2 rounded-2xl border border-white/70 bg-white/70 p-2 shadow-sm">
+                {[
+                  { key: 'all', label: 'All Types', icon: 'mdi:view-grid-outline' },
+                  { key: 'lesson', label: 'Lesson', icon: 'mdi:book-open-variant' },
+                  { key: 'general', label: 'General', icon: 'mdi:clipboard-text-outline' },
+                  ...(hasAssignmentAssessments
+                    ? [{ key: 'assignment', label: 'Assignments', icon: 'mdi:clipboard-edit-outline' }]
+                    : []),
+                  { key: 'form', label: 'Form', icon: 'mdi:form-select' },
+                  { key: 'ai', label: 'Personalized', icon: 'mdi:robot-happy-outline' },
+                ].map((tab) => {
+                  const active = assessmentTab === tab.key;
+                  return (
+                    <button
+                      key={tab.key}
+                      type="button"
+                      onClick={() =>
+                        setAssessmentTab(
+                          tab.key as 'all' | 'lesson' | 'general' | 'form' | 'assignment' | 'ai',
+                        )
+                      }
+                      className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs sm:text-sm font-semibold transition ${
+                        active
+                          ? 'bg-[#9333EA] text-white shadow-sm'
+                          : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-100'
+                      }`}
+                      style={{ fontFamily: 'Andika, sans-serif' }}
+                    >
+                      <Icon icon={tab.icon} width={16} height={16} />
+                      <span>{tab.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             <div className="flex flex-wrap items-center gap-2 sm:gap-3 sm:mx-8 mx-4 mb-6">
               <button
                 onClick={() => {
@@ -392,8 +479,8 @@ export default function MyAssignmentsPage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6 sm:mx-8 mx-4">
-              {filteredAssessments.length > 0 ? (
-                filteredAssessments.map((assessment, index) => {
+              {tabFilteredAssessments.length > 0 ? (
+                tabFilteredAssessments.map((assessment, index) => {
                   const subjectIcon = getSubjectIcon(assessment.type, assessment.title);
                   
                   const handleCardClick = (e: React.MouseEvent) => {
@@ -404,6 +491,9 @@ export default function MyAssignmentsPage() {
                         announce('Assessment locked. Complete the previous lesson quiz to unlock this one.', 'assertive');
                         playSound('error');
                       }
+                    } else if (!assessment.isPlayable) {
+                      e.preventDefault();
+                      showErrorToast('This assessment type cannot be opened yet. Ask your teacher for details.');
                     } else if (isEnabled) {
                       playSound('navigation');
                       announce(`Opening assessment: ${assessment.title}, ${assessment.type}, ${assessment.marks} marks`);
@@ -412,17 +502,19 @@ export default function MyAssignmentsPage() {
                   
                   const cardAriaLabel = assessment.isLocked
                     ? `${assessment.title}, ${assessment.type}, Locked. Complete previous lesson quiz to unlock.`
+                    : !assessment.isPlayable
+                    ? `${assessment.title}, ${assessment.type}, unavailable to open.`
                     : `${assessment.title}, ${assessment.type}, ${assessment.isSubmitted ? 'Completed' : 'Pending'}, ${assessment.marks} marks, ${assessment.isSubmitted ? 'View' : 'Start'} button`;
                   
                   return (
                     <Link
-                      href={assessment.isLocked ? '#' : `/assessments/${assessment.id}`}
+                      href={assessment.isLocked || !assessment.isPlayable ? '#' : `/assessments/${assessment.id}`}
                       key={assessment.id}
                       onClick={handleCardClick}
                       aria-label={cardAriaLabel}
-                      aria-disabled={assessment.isLocked}
+                      aria-disabled={assessment.isLocked || !assessment.isPlayable}
                       className={`bg-white rounded-xl shadow-lg overflow-hidden border-2 ${assessment.borderColor} transition-all w-full max-w-full block ${
-                        assessment.isLocked 
+                        assessment.isLocked || !assessment.isPlayable
                           ? 'cursor-not-allowed opacity-60 hover:scale-100' 
                           : 'cursor-pointer hover:scale-105 hover:shadow-xl'
                       }`}
@@ -473,6 +565,11 @@ export default function MyAssignmentsPage() {
                               <Icon icon="mdi:lock" width={16} height={16} />
                               <span>Locked</span>
                             </div>
+                          ) : !assessment.isPlayable ? (
+                            <div className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold whitespace-nowrap shrink-0 flex items-center gap-1 bg-purple-100 text-purple-700" style={{ fontFamily: 'Andika, sans-serif' }}>
+                              <Icon icon="mdi:information-outline" width={16} height={16} />
+                              <span>Info</span>
+                            </div>
                           ) : (
                             <div
                               className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold whitespace-nowrap shrink-0 flex items-center gap-1 ${
@@ -496,13 +593,20 @@ export default function MyAssignmentsPage() {
                             </div>
                           )}
                         </div>
-                        {assessment.isLocked && assessment.type === 'lesson' && (
+                      {assessment.isLocked && assessment.type === 'lesson' && (
                           <div className="mt-3 pt-3 border-t border-gray-200">
                             <p className="text-xs text-gray-500 text-center" style={{ fontFamily: 'Andika, sans-serif' }}>
                               Complete previous lesson quiz to unlock
                             </p>
                           </div>
                         )}
+                      {!assessment.isPlayable && !assessment.isLocked && (
+                        <div className="mt-3 pt-3 border-t border-gray-200">
+                          <p className="text-xs text-gray-500 text-center" style={{ fontFamily: 'Andika, sans-serif' }}>
+                            This item is visible for tracking but opens in teacher workflow.
+                          </p>
+                        </div>
+                      )}
                       </div>
                     </Link>
                   );
@@ -512,7 +616,17 @@ export default function MyAssignmentsPage() {
                   <div className="bg-white rounded-xl shadow-md p-6 sm:p-8 max-w-md mx-auto">
                     <Icon icon="mdi:clipboard-check-outline" width={48} height={48} className="sm:w-16 sm:h-16 mx-auto text-gray-300 mb-4" />
                     <p className="text-base sm:text-lg font-semibold text-gray-700 mb-2 px-4" style={{ fontFamily: 'Andika, sans-serif' }}>
-                      {filter === 'all' ? 'No Assessments Yet! 🎉' : `No ${filter === 'due_soon' ? 'due soon' : filter === 'submitted' ? 'submitted' : filter.replace('_', ' ')} assessments`}
+                      {filter === 'all' && assessmentTab === 'all'
+                        ? 'No Assessments Yet! 🎉'
+                        : `No ${
+                            assessmentTab === 'all'
+                              ? filter === 'due_soon'
+                                ? 'due soon'
+                                : filter === 'submitted'
+                                ? 'submitted'
+                                : filter.replace('_', ' ')
+                              : assessmentTab
+                          } assessments`}
                     </p>
                     <p className="text-xs sm:text-sm text-gray-500 px-4" style={{ fontFamily: 'Andika, sans-serif' }}>
                       {filter === 'all' 

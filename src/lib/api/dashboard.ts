@@ -265,6 +265,9 @@ export interface KidsAssessment {
   lesson_id?: number;
   marks: number;
   has_questions?: boolean;
+  ai_recommended?: boolean;
+  is_targeted?: boolean;
+  is_form_assessment?: boolean;
 }
 
 export interface KidsAssessmentsResponse {

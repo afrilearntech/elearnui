@@ -4,7 +4,13 @@ import { useState, useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import DashboardLayout from "@/components/parent-teacher/layout/DashboardLayout";
 import { Icon } from "@iconify/react";
-import { getTeacherStudents, TeacherStudent, approveStudent, rejectStudent } from "@/lib/api/parent-teacher/teacher";
+import {
+  getTeacherStudents,
+  TeacherStudent,
+  approveStudent,
+  rejectStudent,
+  generateAiAssessmentsForStudent,
+} from "@/lib/api/parent-teacher/teacher";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
 import { ApiClientError } from "@/lib/api/client";
 import AddStudentModal from "@/components/parent-teacher/teacher/AddStudentModal";
@@ -22,6 +28,19 @@ const formatDate = (dateString: string) => {
   });
 };
 
+function readTeacherUserId(): number | null {
+  if (typeof window === "undefined") return null;
+  const userStr = localStorage.getItem("user");
+  if (!userStr) return null;
+  try {
+    const user = JSON.parse(userStr) as { id?: unknown };
+    const id = typeof user.id === "number" ? user.id : Number(user.id);
+    return Number.isFinite(id) ? id : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function MyClassPage() {
   const queryClient = useQueryClient();
   const { data, isPending, isError, error } = useQuery({
@@ -38,6 +57,7 @@ export default function MyClassPage() {
   const [isAddStudentModalOpen, setIsAddStudentModalOpen] = useState(false);
   const [isBulkUploadModalOpen, setIsBulkUploadModalOpen] = useState(false);
   const [isModerating, setIsModerating] = useState<number | null>(null); // Track which student is being moderated
+  const [isGeneratingForStudentId, setIsGeneratingForStudentId] = useState<number | null>(null);
   const pageSize = 9;
 
   useEffect(() => {
@@ -111,6 +131,42 @@ export default function MyClassPage() {
       }
     } finally {
       setIsModerating(null);
+    }
+  };
+
+  const handleGenerateAiAssessment = async (student: TeacherStudent) => {
+    const teacherId = readTeacherUserId();
+    if (!teacherId) {
+      showErrorToast("Could not identify teacher account. Please sign in again.");
+      return;
+    }
+    if (student.status !== "APPROVED") {
+      showErrorToast("Approve this student first before generating a targeted assessment.");
+      return;
+    }
+
+    setIsGeneratingForStudentId(student.id);
+    try {
+      const result = await generateAiAssessmentsForStudent(teacherId, student.id);
+      const generalCount = result.general_assessments?.length ?? 0;
+      const lessonCount = result.lesson_assessments?.length ?? 0;
+      const total = generalCount + lessonCount;
+      if (total === 0) {
+        showSuccessToast("No new assessments were generated for this student.");
+      } else {
+        showSuccessToast(
+          `Generated ${total} AI assessment${total === 1 ? "" : "s"} for ${student.profile.name}.`
+        );
+      }
+    } catch (error) {
+      console.error("Error generating AI assessment:", error);
+      if (error instanceof ApiClientError) {
+        showErrorToast(error.message || "Failed to generate AI assessments. Please try again.");
+      } else {
+        showErrorToast("Failed to generate AI assessments. Please try again.");
+      }
+    } finally {
+      setIsGeneratingForStudentId(null);
     }
   };
 
@@ -293,6 +349,27 @@ export default function MyClassPage() {
                             <>
                               <Icon icon="solar:close-circle-bold" className="w-4 h-4" />
                               Reject
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    )}
+                    {student.status === "APPROVED" && (
+                      <div className="mt-4 pt-4 border-t border-gray-200" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          onClick={() => void handleGenerateAiAssessment(student)}
+                          disabled={isGeneratingForStudentId === student.id}
+                          className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {isGeneratingForStudentId === student.id ? (
+                            <>
+                              <Icon icon="solar:loading-bold" className="w-4 h-4 animate-spin" />
+                              Generating...
+                            </>
+                          ) : (
+                            <>
+                              <Icon icon="solar:magic-stick-3-bold" className="w-4 h-4" />
+                              Generate AI Assessment
                             </>
                           )}
                         </button>
@@ -593,6 +670,25 @@ export default function MyClassPage() {
             </div>
 
             <div className="sticky bottom-0 bg-white border-t border-gray-200 p-6 flex gap-3 justify-end">
+              {selectedStudent.status === "APPROVED" && (
+                <button
+                  onClick={() => void handleGenerateAiAssessment(selectedStudent)}
+                  disabled={isGeneratingForStudentId === selectedStudent.id}
+                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isGeneratingForStudentId === selectedStudent.id ? (
+                    <>
+                      <Icon icon="solar:loading-bold" className="w-4 h-4 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Icon icon="solar:magic-stick-3-bold" className="w-4 h-4" />
+                      Generate AI Assessment
+                    </>
+                  )}
+                </button>
+              )}
               {selectedStudent.status !== "APPROVED" && (
                 <>
                   <button

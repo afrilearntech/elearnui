@@ -40,6 +40,14 @@ export default function ElementarySidebar({ activeItem = 'home', isMobileMenuOpe
       hoverColor: 'hover:opacity-90'
     },
     {
+      id: 'stories',
+      title: 'Story Castle',
+      icon: '📚',
+      href: '/dashboard/elementary/stories',
+      bgColor: 'bg-[#FFEDD5]',
+      hoverColor: 'hover:opacity-90'
+    },
+    {
       id: 'progress',
       title: 'Progress Garden',
       icon: '🌱',
@@ -150,6 +158,13 @@ export default function ElementarySidebar({ activeItem = 'home', isMobileMenuOpe
                       />
                     </div>
                     <span className="text-[18px] font-semibold text-[#78350F]">{item.title}</span>
+                  </div>
+                ) : item.id === 'stories' ? (
+                  <div className="flex items-center">
+                    <div className="w-10 h-10 bg-[#FB923C] rounded-full flex items-center justify-center mr-4">
+                      <span className="text-xl">📚</span>
+                    </div>
+                    <span className="text-[18px] font-semibold text-[#C2410C]">{item.title}</span>
                   </div>
                 ) : item.id === 'progress' ? (
                   <div className="flex items-center">
@@ -300,6 +315,13 @@ export default function ElementarySidebar({ activeItem = 'home', isMobileMenuOpe
                       />
                     </div>
                     <span className="text-xs text-center leading-tight text-[#A16207]">{item.title}</span>
+                  </div>
+                ) : item.id === 'stories' ? (
+                  <div className="flex flex-col items-center">
+                    <div className="w-10 h-10 bg-[#FB923C] rounded-full flex items-center justify-center mb-2">
+                      <span className="text-xl">📚</span>
+                    </div>
+                    <span className="text-xs text-center leading-tight text-[#C2410C]">{item.title}</span>
                   </div>
                 ) : item.id === 'progress' ? (
                   <div className="flex flex-col items-center">

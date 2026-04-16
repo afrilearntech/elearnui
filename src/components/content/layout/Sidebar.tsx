@@ -17,6 +17,7 @@ const navItems: NavItem[] = [
   { href: "/content/subjects", label: "Subjects", iconSrc: "/img/icons/subject-icon.png" },
   { href: "/content/assessments", label: "Assessment", iconSrc: "/img/icons/subject-icon.png" },
   { href: "/content/lessons", label: "Lessons", iconSrc: "/img/icons/lessons.png" },
+  { href: "/content/stories", label: "Stories", iconSrc: "/img/icons/subject-icon.png" },
   { href: "/content/games", label: "Games", iconSrc: "/img/icons/subject-icon.png" },
   { href: "/content/teachers", label: "Teachers", iconSrc: "/img/icons/subject-icon.png" },
   { href: "/content/settings", label: "Settings", iconSrc: "/img/icons/settings.png" },

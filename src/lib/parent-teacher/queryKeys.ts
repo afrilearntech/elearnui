@@ -7,6 +7,10 @@ export const ptQueryKeys = {
   headTeacherDashboard: ["parent-teacher", "headteacher", "dashboard"] as const,
   /** Lessons + subjects + students bundle (role resolved inside queryFn). */
   lessonsBundle: ["parent-teacher", "teacher", "lessons-bundle"] as const,
+  teacherStories: ["parent-teacher", "teacher", "stories"] as const,
+  teacherStoryDetail: (storyId: number) =>
+    ["parent-teacher", "teacher", "stories", "detail", storyId] as const,
+  headTeacherStories: ["parent-teacher", "headteacher", "stories"] as const,
   headTeacherStudents: ["parent-teacher", "headteacher", "students"] as const,
   headTeacherTeachers: ["parent-teacher", "headteacher", "teachers"] as const,
   headTeacherLeaderboard: ["parent-teacher", "headteacher", "leaderboard"] as const,

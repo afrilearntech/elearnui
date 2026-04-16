@@ -843,6 +843,206 @@ export async function getHeadTeacherSubjects(): Promise<TeacherSubject[]> {
   return await apiRequest<TeacherSubject[]>('/headteacher/subjects/');
 }
 
+export interface StoryCoverImage {
+  prompt: string;
+  image_url: string;
+  alt_text: string;
+}
+
+export interface TeacherStoryListItem {
+  id: number;
+  title: string;
+  grade: string;
+  tag: string;
+  estimated_minutes: number;
+  moral: string;
+  cover_image: StoryCoverImage | null;
+  is_published: boolean;
+  school: number;
+  created_by: number;
+  created_at: string;
+}
+
+export interface TeacherStoryCharacter {
+  name: string;
+  description: string;
+  role: string;
+}
+
+export interface TeacherStoryVocabulary {
+  word: string;
+  definition: string;
+}
+
+export interface TeacherStoryDetail extends TeacherStoryListItem {
+  characters: TeacherStoryCharacter[];
+  vocabulary: TeacherStoryVocabulary[];
+  body: string;
+  updated_at: string;
+}
+
+export interface GenerateTeacherStoriesRequest {
+  grade: string;
+  tag: string;
+  count: number;
+}
+
+export interface GenerateTeacherStoriesResponse {
+  detail?: string;
+  message?: string;
+}
+
+export async function getTeacherStories(filters?: {
+  grade?: string;
+  tag?: string;
+}): Promise<TeacherStoryListItem[]> {
+  const params = new URLSearchParams();
+  if (filters?.grade) params.set('grade', filters.grade);
+  if (filters?.tag) params.set('tag', filters.tag);
+  const query = params.toString();
+  const endpoint = `/teacher/stories/${query ? `?${query}` : ''}`;
+  return await apiRequest<TeacherStoryListItem[]>(endpoint);
+}
+
+export async function getTeacherStoryDetail(id: number): Promise<TeacherStoryDetail> {
+  return await apiRequest<TeacherStoryDetail>(`/teacher/stories/${id}/`);
+}
+
+export async function generateTeacherStories(
+  payload: GenerateTeacherStoriesRequest
+): Promise<GenerateTeacherStoriesResponse> {
+  return await apiRequest<GenerateTeacherStoriesResponse>('/teacher/stories/generate/', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export interface GetHeadTeacherStoriesFilters {
+  grade?: string;
+  tag?: string;
+  is_published?: boolean;
+  school_id?: number;
+}
+
+export interface PublishStoriesRequest {
+  story_ids: number[];
+}
+
+export interface PublishStoriesResponse {
+  detail?: string;
+  message?: string;
+}
+
+export async function getHeadTeacherStories(
+  filters?: GetHeadTeacherStoriesFilters
+): Promise<TeacherStoryListItem[]> {
+  const params = new URLSearchParams();
+  if (filters?.grade) params.set("grade", filters.grade);
+  if (filters?.tag) params.set("tag", filters.tag);
+  if (typeof filters?.is_published === "boolean") {
+    params.set("is_published", String(filters.is_published));
+  }
+  if (typeof filters?.school_id === "number") {
+    params.set("school_id", String(filters.school_id));
+  }
+
+  const query = params.toString();
+  const endpoint = `/headteacher/stories/${query ? `?${query}` : ""}`;
+  return await apiRequest<TeacherStoryListItem[]>(endpoint);
+}
+
+export async function publishHeadTeacherStories(
+  payload: PublishStoriesRequest
+): Promise<PublishStoriesResponse> {
+  return await apiRequest<PublishStoriesResponse>("/headteacher/stories/publish/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export interface GeneratedGeneralAssessment {
+  id: number;
+  title: string;
+  type: "QUIZ" | "ASSIGNMENT" | "TRIAL";
+  given_by: number;
+  instructions: string;
+  marks: number;
+  due_at: string;
+  grade: string;
+  ai_recommended: boolean;
+  is_targeted: boolean;
+  target_student: number | null;
+  status: string;
+  moderation_comment: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GeneratedLessonAssessment {
+  id: number;
+  lesson: number;
+  type: "QUIZ" | "ASSIGNMENT" | "TRIAL";
+  given_by: number;
+  title: string;
+  grade: string;
+  instructions: string;
+  marks: number;
+  due_at: string;
+  ai_recommended: boolean;
+  is_targeted: boolean;
+  target_student: number | null;
+  status: string;
+  moderation_comment: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GenerateAiAssessmentsResponse {
+  general_assessments: GeneratedGeneralAssessment[];
+  lesson_assessments: GeneratedLessonAssessment[];
+}
+
+/**
+ * Backend docs vary between `/teacher/{id}/generate-ai-assessments/{pk}/`
+ * and `/teacher/{id}/generate-ai-assessments/`. Try both to stay compatible.
+ */
+export async function generateAiAssessmentsForStudent(
+  teacherId: number,
+  studentPk: number
+): Promise<GenerateAiAssessmentsResponse> {
+  const attempts: Array<() => Promise<GenerateAiAssessmentsResponse>> = [
+    () =>
+      apiRequest<GenerateAiAssessmentsResponse>(
+        `/teacher/${teacherId}/generate-ai-assessments/${studentPk}/`,
+        { method: "POST" }
+      ),
+    () =>
+      apiRequest<GenerateAiAssessmentsResponse>(
+        `/teacher/${teacherId}/generate-ai-assessments/`,
+        {
+          method: "POST",
+          body: JSON.stringify({ pk: studentPk }),
+        }
+      ),
+  ];
+
+  let lastError: unknown = null;
+  for (const attempt of attempts) {
+    try {
+      return await attempt();
+    } catch (error) {
+      lastError = error;
+      if (error instanceof ApiClientError && [404, 405, 400].includes(error.status ?? 0)) {
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  if (lastError instanceof Error) throw lastError;
+  throw new ApiClientError("Failed to generate AI assessments for this student.", 0);
+}
+
 export interface TeacherLesson {
   id: number;
   subject: number;
