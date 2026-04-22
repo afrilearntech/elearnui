@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Icon } from "@iconify/react";
 import { createLessonAssessment, getTeacherLessons, TeacherLesson } from "@/lib/api/parent-teacher/teacher";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
@@ -15,6 +15,10 @@ export default function CreateAssignmentModal({ isOpen, onClose, onSuccess }: Cr
   const [lessons, setLessons] = useState<TeacherLesson[]>([]);
   const [isLoadingLessons, setIsLoadingLessons] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLessonPickerOpen, setIsLessonPickerOpen] = useState(false);
+  const [lessonSearch, setLessonSearch] = useState("");
+  const [lessonGradeFilter, setLessonGradeFilter] = useState("All");
+  const [lessonSubjectFilter, setLessonSubjectFilter] = useState("All");
 
   const [formData, setFormData] = useState({
     lesson: "",
@@ -28,7 +32,7 @@ export default function CreateAssignmentModal({ isOpen, onClose, onSuccess }: Cr
 
   useEffect(() => {
     if (isOpen) {
-      fetchLessons();
+      void fetchLessons();
     }
   }, [isOpen]);
 
@@ -53,6 +57,59 @@ export default function CreateAssignmentModal({ isOpen, onClose, onSuccess }: Cr
     }
   };
 
+  const getLessonGrade = (lesson: TeacherLesson) =>
+    lesson.grade ||
+    lesson.subject_grade ||
+    lesson.topic_grade ||
+    lesson.period_grade ||
+    lesson.subject_detail?.grade ||
+    (lesson.period ? `GRADE ${lesson.period}` : "Unknown");
+
+  const getLessonSubjectLabel = (lesson: TeacherLesson) =>
+    lesson.subject ? `Subject ${lesson.subject}` : "Unassigned Subject";
+
+  const selectedLesson = useMemo(
+    () => lessons.find((lesson) => String(lesson.id) === formData.lesson) ?? null,
+    [lessons, formData.lesson],
+  );
+
+  const lessonGradeOptions = useMemo(() => {
+    const values = new Set<string>();
+    lessons.forEach((lesson) => values.add(getLessonGrade(lesson)));
+    return ["All", ...Array.from(values)];
+  }, [lessons]);
+
+  const lessonSubjectOptions = useMemo(() => {
+    const values = new Set<string>();
+    lessons.forEach((lesson) => values.add(getLessonSubjectLabel(lesson)));
+    return ["All", ...Array.from(values)];
+  }, [lessons]);
+
+  const filteredLessons = useMemo(() => {
+    const needle = lessonSearch.trim().toLowerCase();
+    return lessons.filter((lesson) => {
+      const grade = getLessonGrade(lesson);
+      const subjectLabel = getLessonSubjectLabel(lesson);
+      const matchesSearch =
+        !needle ||
+        lesson.title.toLowerCase().includes(needle) ||
+        lesson.description.toLowerCase().includes(needle) ||
+        grade.toLowerCase().includes(needle) ||
+        subjectLabel.toLowerCase().includes(needle);
+      const matchesGrade = lessonGradeFilter === "All" || grade === lessonGradeFilter;
+      const matchesSubject = lessonSubjectFilter === "All" || subjectLabel === lessonSubjectFilter;
+      return matchesSearch && matchesGrade && matchesSubject;
+    });
+  }, [lessons, lessonSearch, lessonGradeFilter, lessonSubjectFilter]);
+
+  const handleLessonPick = (lesson: TeacherLesson) => {
+    setFormData((prev) => ({ ...prev, lesson: String(lesson.id) }));
+    if (errors.lesson) {
+      setErrors((prev) => ({ ...prev, lesson: "" }));
+    }
+    setIsLessonPickerOpen(false);
+  };
+
   const validate = () => {
     const newErrors: Record<string, string> = {};
     if (!formData.lesson) newErrors.lesson = "Please select a lesson";
@@ -62,8 +119,7 @@ export default function CreateAssignmentModal({ isOpen, onClose, onSuccess }: Cr
       newErrors.marks = "Marks must be greater than 0";
     }
     if (!formData.due_at) newErrors.due_at = "Due date is required";
-    
-    // Validate due date is in the future
+
     if (formData.due_at) {
       const dueDate = new Date(formData.due_at);
       const now = new Date();
@@ -85,6 +141,9 @@ export default function CreateAssignmentModal({ isOpen, onClose, onSuccess }: Cr
       due_at: "",
     });
     setErrors({});
+    setLessonSearch("");
+    setLessonGradeFilter("All");
+    setLessonSubjectFilter("All");
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -93,7 +152,6 @@ export default function CreateAssignmentModal({ isOpen, onClose, onSuccess }: Cr
 
     setIsSubmitting(true);
     try {
-      // Don't send given_by - let the backend infer it from the authentication token
       await createLessonAssessment({
         lesson: Number(formData.lesson),
         type: "ASSIGNMENT",
@@ -101,16 +159,16 @@ export default function CreateAssignmentModal({ isOpen, onClose, onSuccess }: Cr
         instructions: formData.instructions.trim(),
         marks: Number(formData.marks),
         due_at: new Date(formData.due_at).toISOString(),
-        status: "PENDING",
+        status: "APPROVED",
         moderation_comment: "",
       });
 
-      showSuccessToast("Assignment created successfully!");
+      showSuccessToast("Assessment created successfully!");
       resetForm();
       onSuccess();
       onClose();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unable to create assignment.";
+      const message = error instanceof Error ? error.message : "Unable to create assessment.";
       showErrorToast(message);
     } finally {
       setIsSubmitting(false);
@@ -119,7 +177,6 @@ export default function CreateAssignmentModal({ isOpen, onClose, onSuccess }: Cr
 
   if (!isOpen) return null;
 
-  // Get minimum date (today)
   const today = new Date().toISOString().split("T")[0];
 
   return (
@@ -127,66 +184,57 @@ export default function CreateAssignmentModal({ isOpen, onClose, onSuccess }: Cr
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-gray-200">
         <div className="sticky top-0 bg-white border-b border-gray-200 p-6 z-10">
           <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-bold text-gray-900">Create Assignment</h2>
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
-            >
+            <h2 className="text-2xl font-bold text-gray-900">Create Assessment</h2>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
               <Icon icon="solar:close-circle-bold" className="w-6 h-6" />
             </button>
           </div>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          {/* Lesson Selection */}
           <div>
             <label className="block text-sm font-medium text-gray-800 mb-2">
               Lesson<span className="text-red-600">*</span>
             </label>
-            <select
-              name="lesson"
-              value={formData.lesson}
-              onChange={handleChange}
+            <button
+              type="button"
               disabled={isLoadingLessons}
-              className={`w-full h-11 rounded-lg border px-3 text-gray-700 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500 disabled:cursor-not-allowed disabled:bg-gray-50 ${
+              onClick={() => setIsLessonPickerOpen(true)}
+              className={`w-full min-h-[48px] rounded-lg border px-4 py-2 text-left text-gray-700 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500 disabled:cursor-not-allowed disabled:bg-gray-50 ${
                 errors.lesson ? "border-red-500" : "border-gray-300"
               }`}
             >
-              <option value="">
-                {isLoadingLessons ? "Loading lessons..." : "Select a lesson"}
-              </option>
-              {lessons.map((lesson) => (
-                <option key={lesson.id} value={lesson.id}>
-                  {lesson.title} {lesson.description ? `- ${lesson.description.substring(0, 50)}...` : ""}
-                </option>
-              ))}
-            </select>
-            {errors.lesson && (
-              <p className="mt-1 text-sm text-red-600">{errors.lesson}</p>
-            )}
+              {selectedLesson ? (
+                <div>
+                  <p className="font-medium text-gray-900">{selectedLesson.title}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {getLessonSubjectLabel(selectedLesson)} • {getLessonGrade(selectedLesson)}
+                  </p>
+                </div>
+              ) : (
+                <span className="text-gray-400">{isLoadingLessons ? "Loading lessons..." : "Select a lesson"}</span>
+              )}
+            </button>
+            {errors.lesson && <p className="mt-1 text-sm text-red-600">{errors.lesson}</p>}
           </div>
 
-          {/* Title */}
           <div>
             <label className="block text-sm font-medium text-gray-800 mb-2">
-              Assignment Title<span className="text-red-600">*</span>
+              Assessment Title<span className="text-red-600">*</span>
             </label>
             <input
               type="text"
               name="title"
               value={formData.title}
               onChange={handleChange}
-              placeholder="e.g. Introduction to Algebra Assignment"
+              placeholder="e.g. Introduction to Algebra Assessment"
               className={`w-full h-11 rounded-lg border px-4 text-gray-700 placeholder:text-gray-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500 ${
                 errors.title ? "border-red-500" : "border-gray-300"
               }`}
             />
-            {errors.title && (
-              <p className="mt-1 text-sm text-red-600">{errors.title}</p>
-            )}
+            {errors.title && <p className="mt-1 text-sm text-red-600">{errors.title}</p>}
           </div>
 
-          {/* Instructions */}
           <div>
             <label className="block text-sm font-medium text-gray-800 mb-2">
               Instructions<span className="text-red-600">*</span>
@@ -196,17 +244,14 @@ export default function CreateAssignmentModal({ isOpen, onClose, onSuccess }: Cr
               value={formData.instructions}
               onChange={handleChange}
               rows={4}
-              placeholder="Provide detailed instructions for the assignment..."
+              placeholder="Provide detailed instructions for the assessment..."
               className={`w-full resize-y rounded-lg border p-4 text-gray-700 placeholder:text-gray-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500 ${
                 errors.instructions ? "border-red-500" : "border-gray-300"
               }`}
             />
-            {errors.instructions && (
-              <p className="mt-1 text-sm text-red-600">{errors.instructions}</p>
-            )}
+            {errors.instructions && <p className="mt-1 text-sm text-red-600">{errors.instructions}</p>}
           </div>
 
-          {/* Marks and Due Date */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-800 mb-2">
@@ -223,9 +268,7 @@ export default function CreateAssignmentModal({ isOpen, onClose, onSuccess }: Cr
                   errors.marks ? "border-red-500" : "border-gray-300"
                 }`}
               />
-              {errors.marks && (
-                <p className="mt-1 text-sm text-red-600">{errors.marks}</p>
-              )}
+              {errors.marks && <p className="mt-1 text-sm text-red-600">{errors.marks}</p>}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-800 mb-2">
@@ -241,9 +284,7 @@ export default function CreateAssignmentModal({ isOpen, onClose, onSuccess }: Cr
                   errors.due_at ? "border-red-500" : "border-gray-300"
                 }`}
               />
-              {errors.due_at && (
-                <p className="mt-1 text-sm text-red-600">{errors.due_at}</p>
-              )}
+              {errors.due_at && <p className="mt-1 text-sm text-red-600">{errors.due_at}</p>}
             </div>
           </div>
 
@@ -260,11 +301,92 @@ export default function CreateAssignmentModal({ isOpen, onClose, onSuccess }: Cr
               disabled={isSubmitting}
               className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {isSubmitting ? "Creating..." : "Create Assignment"}
+              {isSubmitting ? "Creating..." : "Create Assessment"}
             </button>
           </div>
         </form>
       </div>
+
+      {isLessonPickerOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-4xl rounded-2xl bg-white shadow-2xl border border-gray-200 max-h-[88vh] overflow-hidden">
+            <div className="border-b border-gray-200 px-5 py-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Select Lesson</h3>
+                  <p className="text-sm text-gray-500">Search lessons and filter by grade or subject.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsLessonPickerOpen(false)}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  <Icon icon="solar:close-circle-bold" className="w-6 h-6" />
+                </button>
+              </div>
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+                <input
+                  type="text"
+                  value={lessonSearch}
+                  onChange={(e) => setLessonSearch(e.target.value)}
+                  placeholder="Search by title, description, grade..."
+                  className="h-10 rounded-lg border border-gray-300 px-3 text-sm text-gray-700 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500"
+                />
+                <select
+                  value={lessonGradeFilter}
+                  onChange={(e) => setLessonGradeFilter(e.target.value)}
+                  className="h-10 rounded-lg border border-gray-300 px-3 text-sm text-gray-700 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500"
+                >
+                  {lessonGradeOptions.map((grade) => (
+                    <option key={grade} value={grade}>
+                      {grade === "All" ? "All Grades" : grade}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={lessonSubjectFilter}
+                  onChange={(e) => setLessonSubjectFilter(e.target.value)}
+                  className="h-10 rounded-lg border border-gray-300 px-3 text-sm text-gray-700 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500"
+                >
+                  {lessonSubjectOptions.map((subject) => (
+                    <option key={subject} value={subject}>
+                      {subject === "All" ? "All Subjects" : subject}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="max-h-[55vh] overflow-y-auto divide-y divide-gray-100">
+              {filteredLessons.length === 0 ? (
+                <div className="p-8 text-center text-sm text-gray-500">No lessons match your filters.</div>
+              ) : (
+                filteredLessons.map((lesson) => {
+                  const isActive = String(lesson.id) === formData.lesson;
+                  return (
+                    <button
+                      key={lesson.id}
+                      type="button"
+                      onClick={() => handleLessonPick(lesson)}
+                      className={`w-full text-left px-5 py-4 transition-colors ${isActive ? "bg-emerald-50" : "hover:bg-gray-50"}`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="font-semibold text-gray-900 truncate">{lesson.title}</p>
+                          <p className="text-xs text-gray-600 mt-1 line-clamp-2">{lesson.description || "No description"}</p>
+                          <p className="text-xs text-gray-500 mt-2">
+                            {getLessonSubjectLabel(lesson)} • {getLessonGrade(lesson)}
+                          </p>
+                        </div>
+                        {isActive ? <Icon icon="solar:check-circle-bold" className="w-5 h-5 text-emerald-600 shrink-0" /> : null}
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

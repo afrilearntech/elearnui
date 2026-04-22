@@ -123,7 +123,7 @@ export default function CreateGeneralAssessmentModal({
         marks: Number(formData.marks),
         due_at: new Date(formData.due_at).toISOString(),
         grade: formData.grade,
-        status: "PENDING",
+        status: "APPROVED",
       });
 
       showSuccessToast("General assessment created successfully!");

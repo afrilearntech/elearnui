@@ -71,8 +71,14 @@ export async function apiRequest<T>(
       throw error;
     }
     if (error instanceof TypeError && error.message === 'Failed to fetch') {
+      let hostLabel = 'API host';
+      try {
+        hostLabel = new URL(API_BASE_URL).host;
+      } catch {
+        // ignore URL parse failures and keep generic label
+      }
       throw new ApiClientError(
-        'Network error: Unable to reach the server. Please check your connection and try again.',
+        `Network error: Unable to reach ${hostLabel}. This is usually a DNS/host resolution issue (ERR_NAME_NOT_RESOLVED).`,
         0
       );
     }

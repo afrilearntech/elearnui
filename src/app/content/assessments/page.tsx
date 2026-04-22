@@ -2,20 +2,31 @@
 
 import React from "react";
 import { useRouter } from "next/navigation";
-import { getAssessments, AssessmentRecord } from "@/lib/api/content/assessments";
-import { moderateContent, ModerateAction } from "@/lib/api/content/lessons";
+import {
+  getAssessments,
+  AssessmentRecord,
+  createGeneralAssessment,
+  createLessonAssessment,
+  createContentQuestion,
+  updateContentAssessmentStatus,
+} from "@/lib/api/content/assessments";
+import { getLessons, LessonRecord } from "@/lib/api/content/lessons";
 
 type AssessmentRow = {
   id: string;
   title: string;
   type: string;
-  kind: "general" | "lesson";
+  kind: "general" | "lesson";  
+  instructions: string;
   grade: string;
   marks: number;
   dueDate: string;
   dueDateFormatted: string;
   creator: string;
   creatorId: number;
+  aiRecommended: boolean;
+  isTargeted: boolean;
+  targetStudent: number | null;
   status: "REJECTED" | "VALIDATED" | "PENDING" | "REQUEST_CHANGES";
   lessonId?: number;
   lessonTitle?: string;
@@ -51,12 +62,16 @@ function mapAssessment(record: AssessmentRecord): AssessmentRow {
     title: record.title,
     type: record.type,
     kind: record.kind,
+    instructions: record.instructions || "",
     grade: record.grade || "Grade -",
     marks: record.marks,
     dueDate: record.due_at,
     dueDateFormatted,
     creator: record.given_by_id ? `Creator ${record.given_by_id}` : "Unknown Creator",
     creatorId: record.given_by_id,
+    aiRecommended: Boolean(record.ai_recommended),
+    isTargeted: Boolean(record.is_targeted),
+    targetStudent: record.target_student ?? null,
     status,
     lessonId: record.lesson_id,
     lessonTitle: record.lesson_title,
@@ -85,8 +100,31 @@ async function notifySuccess(message: string) {
 export default function AssessmentsPage() {
   const router = useRouter();
   const [assessments, setAssessments] = React.useState<AssessmentRow[]>([]);
+  const [lessons, setLessons] = React.useState<LessonRecord[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [loadError, setLoadError] = React.useState<string | null>(null);
+  const [userRole, setUserRole] = React.useState<string>("CONTENTCREATOR");
+  const isValidator = userRole === "CONTENTVALIDATOR";
+  const [showCreateGeneralModal, setShowCreateGeneralModal] = React.useState(false);
+  const [showCreateLessonModal, setShowCreateLessonModal] = React.useState(false);
+  const [isCreating, setIsCreating] = React.useState(false);
+  const [generalForm, setGeneralForm] = React.useState({
+    title: "",
+    type: "QUIZ" as "QUIZ" | "ASSIGNMENT" | "TRIAL",
+    grade: "",
+    instructions: "",
+    marks: 10,
+    due_at: "",
+  });
+  const [lessonForm, setLessonForm] = React.useState({
+    lesson: 0,
+    title: "",
+    type: "QUIZ" as "QUIZ" | "ASSIGNMENT" | "TRIAL",
+    grade: "",
+    instructions: "",
+    marks: 10,
+    due_at: "",
+  });
   const [search, setSearch] = React.useState("");
   const [kindFilter, setKindFilter] = React.useState("All");
   const [gradeFilter, setGradeFilter] = React.useState("All");
@@ -98,9 +136,20 @@ export default function AssessmentsPage() {
   const [isModerationModalOpen, setIsModerationModalOpen] = React.useState(false);
   const [moderationComment, setModerationComment] = React.useState("");
   const [moderationFormError, setModerationFormError] = React.useState<string | null>(null);
-  const [pendingModerationAction, setPendingModerationAction] = React.useState<ModerateAction | null>(null);
-  const [moderationLoadingAction, setModerationLoadingAction] = React.useState<ModerateAction | null>(null);
+  type AssessmentModerationAction = "approve" | "reject" | "request_changes";
+  const [pendingModerationAction, setPendingModerationAction] = React.useState<AssessmentModerationAction | null>(null);
+  const [moderationLoadingAction, setModerationLoadingAction] = React.useState<AssessmentModerationAction | null>(null);
   const isModerationProcessing = moderationLoadingAction !== null;
+  const [isQuestionModalOpen, setIsQuestionModalOpen] = React.useState(false);
+  const [questionAssessment, setQuestionAssessment] = React.useState<AssessmentRow | null>(null);
+  const [isCreatingQuestion, setIsCreatingQuestion] = React.useState(false);
+  const [questionFormError, setQuestionFormError] = React.useState<string | null>(null);
+  const [questionForm, setQuestionForm] = React.useState({
+    type: "MULTIPLE_CHOICE" as "MULTIPLE_CHOICE" | "TRUE_FALSE" | "SHORT_ANSWER" | "ESSAY" | "FILL_IN_THE_BLANK",
+    question: "",
+    answer: "",
+    options: ["", "", "", ""],
+  });
 
   const fetchAssessments = React.useCallback(async (showLoading = true, updateModal = false) => {
     try {
@@ -140,8 +189,38 @@ export default function AssessmentsPage() {
   }, []);
 
   React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const userStr = localStorage.getItem("user");
+    if (!userStr) return;
+    try {
+      const user = JSON.parse(userStr);
+      setUserRole(user.role || "CONTENTCREATOR");
+    } catch (error) {
+      console.error("Error parsing user data:", error);
+    }
+  }, []);
+
+  const fetchLessonsForCreator = React.useCallback(async () => {
+    if (typeof window === "undefined") return;
+    try {
+      const token = localStorage.getItem("auth_token");
+      if (!token) return;
+      const data = await getLessons(token);
+      setLessons(data);
+    } catch (error) {
+      console.error("Failed to load lessons for assessment creation", error);
+    }
+  }, []);
+
+  React.useEffect(() => {
     fetchAssessments();
   }, [fetchAssessments]);
+
+  React.useEffect(() => {
+    if (!isValidator) {
+      void fetchLessonsForCreator();
+    }
+  }, [isValidator, fetchLessonsForCreator]);
 
   const kindOptions = React.useMemo(() => {
     const options = new Set<string>();
@@ -220,6 +299,23 @@ export default function AssessmentsPage() {
     setPendingModerationAction(null);
   }, []);
 
+  const resetQuestionForm = React.useCallback(() => {
+    setQuestionForm({
+      type: "MULTIPLE_CHOICE",
+      question: "",
+      answer: "",
+      options: ["", "", "", ""],
+    });
+    setQuestionFormError(null);
+  }, []);
+
+  const closeQuestionModal = React.useCallback(() => {
+    if (isCreatingQuestion) return;
+    setIsQuestionModalOpen(false);
+    setQuestionAssessment(null);
+    resetQuestionForm();
+  }, [isCreatingQuestion, resetQuestionForm]);
+
   const updateAssessmentStatusInState = React.useCallback(
     (assessmentId: number, status: AssessmentRow["status"], moderationComment?: string | null) => {
       const assessmentIdString = String(assessmentId);
@@ -242,7 +338,7 @@ export default function AssessmentsPage() {
   );
 
   const submitModeration = React.useCallback(
-    async (action: ModerateAction, comment?: string) => {
+    async (action: AssessmentModerationAction, comment?: string) => {
       if (!modalAssessment) return;
       if (typeof window === "undefined") return;
 
@@ -258,22 +354,51 @@ export default function AssessmentsPage() {
         return;
       }
 
-      const modelType = modalAssessment.kind === "general" ? "general_assessment" : "lesson_assessment";
-
       setModerationLoadingAction(action);
       try {
-        const response = await moderateContent(
-          {
-            model: modelType,
-            id: assessmentId,
-            action,
-            ...(comment ? { moderation_comment: comment } : {}),
-          },
+        const nextStatus =
+          action === "approve" ? "APPROVED" : action === "reject" ? "REJECTED" : "REQUEST_CHANGES";
+
+        const response = await updateContentAssessmentStatus(
+          modalAssessment.kind,
+          assessmentId,
+          modalAssessment.kind === "general"
+            ? {
+                title: modalAssessment.title,
+                type: modalAssessment.type as "QUIZ" | "ASSIGNMENT" | "TRIAL",
+                given_by: modalAssessment.creatorId,
+                instructions: modalAssessment.instructions,
+                marks: modalAssessment.marks,
+                due_at: modalAssessment.dueDate,
+                grade: modalAssessment.grade,
+                ai_recommended: modalAssessment.aiRecommended,
+                is_targeted: modalAssessment.isTargeted,
+                target_student: modalAssessment.targetStudent,
+                status: nextStatus,
+                moderation_comment: comment ?? modalAssessment.moderation_comment ?? "",
+              }
+            : {
+                lesson: Number(modalAssessment.lessonId ?? 0),
+                type: modalAssessment.type as "QUIZ" | "ASSIGNMENT" | "TRIAL",
+                given_by: modalAssessment.creatorId,
+                title: modalAssessment.title,
+                instructions: modalAssessment.instructions,
+                marks: modalAssessment.marks,
+                due_at: modalAssessment.dueDate,
+                ai_recommended: modalAssessment.aiRecommended,
+                is_targeted: modalAssessment.isTargeted,
+                target_student: modalAssessment.targetStudent,
+                status: nextStatus,
+                moderation_comment: comment ?? modalAssessment.moderation_comment ?? "",
+              },
           token,
         );
-        const normalizedStatus = normalizeStatus(response.status);
-        const updatedComment = response.moderation_comment ?? comment ?? null;
-        updateAssessmentStatusInState(response.id, normalizedStatus, updatedComment);
+        const normalizedStatus = normalizeStatus(
+          typeof response.status === "string" ? response.status : nextStatus,
+        );
+        const updatedComment =
+          typeof response.moderation_comment === "string" ? response.moderation_comment : comment ?? null;
+        updateAssessmentStatusInState(assessmentId, normalizedStatus, updatedComment);
 
         await fetchAssessments(false, true);
 
@@ -306,10 +431,10 @@ export default function AssessmentsPage() {
     [modalAssessment, updateAssessmentStatusInState, closeModal, fetchAssessments],
   );
 
-  const showModerationActions = modalAssessment?.status === "PENDING";
+  const showModerationActions = isValidator && modalAssessment?.status === "PENDING";
 
   const handleModerationAction = React.useCallback(
-    (action: ModerateAction) => {
+    (action: AssessmentModerationAction) => {
       if (!modalAssessment || !showModerationActions) return;
       if (action === "request_changes") {
         setPendingModerationAction(action);
@@ -333,9 +458,235 @@ export default function AssessmentsPage() {
     await submitModeration(pendingModerationAction, moderationComment.trim());
   };
 
+  const handleCreateGeneralAssessment = async () => {
+    if (isValidator) {
+      await notifyError("Validators cannot create assessments.");
+      return;
+    }
+    if (!generalForm.title.trim() || !generalForm.grade.trim() || !generalForm.instructions.trim() || !generalForm.due_at) {
+      await notifyError("Please fill all required general assessment fields.");
+      return;
+    }
+    if (!generalForm.marks || generalForm.marks <= 0) {
+      await notifyError("Marks must be greater than zero.");
+      return;
+    }
+
+    const token = localStorage.getItem("auth_token");
+    if (!token) {
+      await notifyError("Missing authentication token. Please sign in again.");
+      return;
+    }
+
+    setIsCreating(true);
+    try {
+      await createGeneralAssessment(
+        {
+          ...generalForm,
+          status: "PENDING",
+          moderation_comment: "",
+        },
+        token,
+      );
+      await notifySuccess("General assessment created successfully.");
+      setShowCreateGeneralModal(false);
+      setGeneralForm({
+        title: "",
+        type: "QUIZ",
+        grade: "",
+        instructions: "",
+        marks: 10,
+        due_at: "",
+      });
+      await fetchAssessments(false);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to create general assessment.";
+      await notifyError(message);
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const handleCreateLessonAssessment = async () => {
+    if (isValidator) {
+      await notifyError("Validators cannot create assessments.");
+      return;
+    }
+    if (
+      !lessonForm.lesson ||
+      !lessonForm.title.trim() ||
+      !lessonForm.grade.trim() ||
+      !lessonForm.instructions.trim() ||
+      !lessonForm.due_at
+    ) {
+      await notifyError("Please fill all required lesson assessment fields.");
+      return;
+    }
+    if (!lessonForm.marks || lessonForm.marks <= 0) {
+      await notifyError("Marks must be greater than zero.");
+      return;
+    }
+
+    const token = localStorage.getItem("auth_token");
+    if (!token) {
+      await notifyError("Missing authentication token. Please sign in again.");
+      return;
+    }
+
+    setIsCreating(true);
+    try {
+      await createLessonAssessment(
+        {
+          ...lessonForm,
+          status: "PENDING",
+          moderation_comment: "",
+        },
+        token,
+      );
+      await notifySuccess("Lesson assessment created successfully.");
+      setShowCreateLessonModal(false);
+      setLessonForm({
+        lesson: 0,
+        title: "",
+        type: "QUIZ",
+        grade: "",
+        instructions: "",
+        marks: 10,
+        due_at: "",
+      });
+      await fetchAssessments(false);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to create lesson assessment.";
+      await notifyError(message);
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const openQuestionModal = React.useCallback(
+    (assessment: AssessmentRow) => {
+      setQuestionAssessment(assessment);
+      setIsQuestionModalOpen(true);
+      resetQuestionForm();
+    },
+    [resetQuestionForm],
+  );
+
+  const questionOptions = React.useMemo(
+    () => questionForm.options.map((value) => value.trim()).filter((value) => value.length > 0),
+    [questionForm.options],
+  );
+
+  const answerOptions = React.useMemo(() => {
+    if (questionForm.type === "TRUE_FALSE") {
+      return ["True", "False"];
+    }
+    if (questionForm.type === "MULTIPLE_CHOICE") {
+      return questionOptions;
+    }
+    return [];
+  }, [questionForm.type, questionOptions]);
+
+  React.useEffect(() => {
+    if (questionForm.type === "TRUE_FALSE") {
+      setQuestionForm((prev) => (prev.answer ? prev : { ...prev, answer: "True" }));
+      return;
+    }
+    if (questionForm.type === "MULTIPLE_CHOICE") {
+      setQuestionForm((prev) => {
+        const validAnswer = questionOptions.includes(prev.answer) ? prev.answer : "";
+        return validAnswer === prev.answer ? prev : { ...prev, answer: validAnswer };
+      });
+    }
+  }, [questionForm.type, questionOptions]);
+
+  const handleCreateQuestion = async () => {
+    if (!questionAssessment) {
+      await notifyError("Select an assessment first.");
+      return;
+    }
+
+    if (!questionForm.question.trim()) {
+      setQuestionFormError("Question text is required.");
+      return;
+    }
+
+    if (!questionForm.answer.trim()) {
+      setQuestionFormError("Please provide the correct answer.");
+      return;
+    }
+
+    if (questionForm.type === "MULTIPLE_CHOICE" && questionOptions.length < 2) {
+      setQuestionFormError("Please provide at least two options for multiple choice.");
+      return;
+    }
+
+    if (questionForm.type === "MULTIPLE_CHOICE" && !questionOptions.includes(questionForm.answer.trim())) {
+      setQuestionFormError("The selected correct answer must be one of the options.");
+      return;
+    }
+
+    const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+    if (!token) {
+      await notifyError("Missing authentication token. Please sign in again.");
+      return;
+    }
+
+    setIsCreatingQuestion(true);
+    setQuestionFormError(null);
+
+    try {
+      const assessmentId = Number(questionAssessment.id);
+      await createContentQuestion(
+        {
+          ...(questionAssessment.kind === "general"
+            ? { general_assessment_id: assessmentId }
+            : { lesson_assessment_id: assessmentId }),
+          type: questionForm.type,
+          question: questionForm.question.trim(),
+          answer: questionForm.answer.trim(),
+          ...(questionForm.type === "MULTIPLE_CHOICE" ? { options: questionOptions } : {}),
+        },
+        token,
+      );
+
+      await notifySuccess("Question added successfully.");
+      closeQuestionModal();
+      await fetchAssessments(false, Boolean(modalAssessment));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to create question.";
+      await notifyError(message);
+    } finally {
+      setIsCreatingQuestion(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">Assessments</h1>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Assessments</h1>
+          <p className="text-sm text-gray-500">
+            {isValidator ? "Review assessment submissions." : "Create and manage your lesson and general assessments."}
+          </p>
+        </div>
+        {!isValidator ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setShowCreateGeneralModal(true)}
+              className="inline-flex items-center justify-center gap-2 rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+            >
+              + Create General Assessment
+            </button>
+            <button
+              onClick={() => setShowCreateLessonModal(true)}
+              className="inline-flex items-center justify-center gap-2 rounded-full bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700"
+            >
+              + Create Lesson Assessment
+            </button>
+          </div>
+        ) : null}
+      </div>
 
       <div className="flex flex-col gap-4 rounded-xl border border-gray-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex w-full flex-col gap-4 sm:flex-row sm:items-center sm:flex-1">
@@ -428,12 +779,22 @@ export default function AssessmentsPage() {
                     </span>
                   </div>
                   <div className="col-span-2 flex items-center justify-end">
-                    <button
-                      className="rounded-lg bg-emerald-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors"
-                      onClick={() => handleReview(assessment)}
-                    >
-                      Review
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {!isValidator ? (
+                        <button
+                          className="rounded-lg bg-sky-600 px-4 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-sky-700"
+                          onClick={() => openQuestionModal(assessment)}
+                        >
+                          Add Question
+                        </button>
+                      ) : null}
+                      <button
+                        className="rounded-lg bg-emerald-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors"
+                        onClick={() => handleReview(assessment)}
+                      >
+                        Review
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -482,12 +843,22 @@ export default function AssessmentsPage() {
                 </div>
               </div>
               <div className="mt-4 flex justify-end">
-                <button
-                  className="rounded-lg bg-emerald-600 px-5 py-2 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors"
-                  onClick={() => handleReview(assessment)}
-                >
-                  Review
-                </button>
+                <div className="flex items-center gap-2">
+                  {!isValidator ? (
+                    <button
+                      className="rounded-lg bg-sky-600 px-5 py-2 text-xs font-semibold text-white transition-colors hover:bg-sky-700"
+                      onClick={() => openQuestionModal(assessment)}
+                    >
+                      Add Question
+                    </button>
+                  ) : null}
+                  <button
+                    className="rounded-lg bg-emerald-600 px-5 py-2 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors"
+                    onClick={() => handleReview(assessment)}
+                  >
+                    Review
+                  </button>
+                </div>
               </div>
             </div>
           ))
@@ -815,6 +1186,208 @@ export default function AssessmentsPage() {
                 </div>
               </div>
             ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {isQuestionModalOpen ? (
+        <div className="fixed inset-0 z-[135] flex items-center justify-center bg-black/60 px-4" onClick={(event) => event.target === event.currentTarget && closeQuestionModal()}>
+          <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-xl font-semibold text-gray-900">Add Question</h3>
+                <p className="text-sm text-gray-500">
+                  {questionAssessment ? `For ${questionAssessment.title}` : "Select a question type and fill the details."}
+                </p>
+              </div>
+              <button
+                className="rounded-full border border-gray-200 p-2 text-gray-500 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={isCreatingQuestion}
+                onClick={closeQuestionModal}
+                aria-label="Close add question modal"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="mt-5 space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Question Type</label>
+                  <select
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900"
+                    value={questionForm.type}
+                    onChange={(event) =>
+                      setQuestionForm((prev) => ({
+                        ...prev,
+                        type: event.target.value as "MULTIPLE_CHOICE" | "TRUE_FALSE" | "SHORT_ANSWER" | "ESSAY" | "FILL_IN_THE_BLANK",
+                        answer: "",
+                      }))
+                    }
+                    disabled={isCreatingQuestion}
+                  >
+                    <option value="MULTIPLE_CHOICE">Multiple Choice</option>
+                    <option value="TRUE_FALSE">True / False</option>
+                    <option value="SHORT_ANSWER">Short Answer</option>
+                    <option value="ESSAY">Essay</option>
+                    <option value="FILL_IN_THE_BLANK">Fill In The Blank</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-gray-700">Question</label>
+                <textarea
+                  rows={3}
+                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900"
+                  placeholder="Enter the question..."
+                  value={questionForm.question}
+                  onChange={(event) => setQuestionForm((prev) => ({ ...prev, question: event.target.value }))}
+                  disabled={isCreatingQuestion}
+                />
+              </div>
+
+              {questionForm.type === "MULTIPLE_CHOICE" ? (
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Options</label>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                    {questionForm.options.map((option, index) => (
+                      <input
+                        key={`option-${index}`}
+                        className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900"
+                        placeholder={`Option ${index + 1}`}
+                        value={option}
+                        onChange={(event) =>
+                          setQuestionForm((prev) => ({
+                            ...prev,
+                            options: prev.options.map((existing, optionIndex) =>
+                              optionIndex === index ? event.target.value : existing,
+                            ),
+                          }))
+                        }
+                        disabled={isCreatingQuestion}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              <div>
+                <label className="text-sm font-medium text-gray-700">Correct Answer</label>
+                {questionForm.type === "MULTIPLE_CHOICE" || questionForm.type === "TRUE_FALSE" ? (
+                  <select
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900"
+                    value={questionForm.answer}
+                    onChange={(event) => setQuestionForm((prev) => ({ ...prev, answer: event.target.value }))}
+                    disabled={isCreatingQuestion}
+                  >
+                    <option value="">Select correct answer</option>
+                    {answerOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                ) : questionForm.type === "ESSAY" ? (
+                  <textarea
+                    rows={3}
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900"
+                    placeholder="Sample model answer..."
+                    value={questionForm.answer}
+                    onChange={(event) => setQuestionForm((prev) => ({ ...prev, answer: event.target.value }))}
+                    disabled={isCreatingQuestion}
+                  />
+                ) : (
+                  <input
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900"
+                    placeholder="Enter the correct answer"
+                    value={questionForm.answer}
+                    onChange={(event) => setQuestionForm((prev) => ({ ...prev, answer: event.target.value }))}
+                    disabled={isCreatingQuestion}
+                  />
+                )}
+              </div>
+
+              {questionFormError ? <p className="text-sm text-rose-600">{questionFormError}</p> : null}
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={isCreatingQuestion}
+                onClick={closeQuestionModal}
+              >
+                Cancel
+              </button>
+              <button
+                className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={isCreatingQuestion}
+                onClick={handleCreateQuestion}
+              >
+                {isCreatingQuestion ? "Saving..." : "Save Question"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showCreateGeneralModal ? (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center bg-black/60 px-4" onClick={(e) => e.target === e.currentTarget && !isCreating && setShowCreateGeneralModal(false)}>
+          <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl">
+            <h3 className="text-xl font-semibold text-gray-900">Create General Assessment</h3>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <input className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900" placeholder="Title" value={generalForm.title} onChange={(e) => setGeneralForm((p) => ({ ...p, title: e.target.value }))} />
+              <input className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900" placeholder="Grade (e.g. GRADE 4)" value={generalForm.grade} onChange={(e) => setGeneralForm((p) => ({ ...p, grade: e.target.value }))} />
+              <select className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900" value={generalForm.type} onChange={(e) => setGeneralForm((p) => ({ ...p, type: e.target.value as "QUIZ" | "ASSIGNMENT" | "TRIAL" }))}>
+                <option value="QUIZ">QUIZ</option>
+                <option value="ASSIGNMENT">ASSIGNMENT</option>
+                <option value="TRIAL">TRIAL</option>
+              </select>
+              <input type="number" min={1} className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900" placeholder="Marks" value={generalForm.marks} onChange={(e) => setGeneralForm((p) => ({ ...p, marks: Number(e.target.value || 0) }))} />
+              <input type="datetime-local" className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 sm:col-span-2" value={generalForm.due_at} onChange={(e) => setGeneralForm((p) => ({ ...p, due_at: e.target.value }))} />
+              <textarea className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 sm:col-span-2" rows={4} placeholder="Instructions" value={generalForm.instructions} onChange={(e) => setGeneralForm((p) => ({ ...p, instructions: e.target.value }))} />
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700" disabled={isCreating} onClick={() => setShowCreateGeneralModal(false)}>Cancel</button>
+              <button className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60" disabled={isCreating} onClick={handleCreateGeneralAssessment}>
+                {isCreating ? "Creating..." : "Create General Assessment"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showCreateLessonModal ? (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center bg-black/60 px-4" onClick={(e) => e.target === e.currentTarget && !isCreating && setShowCreateLessonModal(false)}>
+          <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl">
+            <h3 className="text-xl font-semibold text-gray-900">Create Lesson Assessment</h3>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <select className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 sm:col-span-2" value={lessonForm.lesson} onChange={(e) => setLessonForm((p) => ({ ...p, lesson: Number(e.target.value || 0) }))}>
+                <option value={0}>Select Lesson</option>
+                {lessons.map((lesson) => (
+                  <option key={lesson.id} value={lesson.id}>{lesson.title}</option>
+                ))}
+              </select>
+              <input className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900" placeholder="Title" value={lessonForm.title} onChange={(e) => setLessonForm((p) => ({ ...p, title: e.target.value }))} />
+              <input className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900" placeholder="Grade (e.g. GRADE 4)" value={lessonForm.grade} onChange={(e) => setLessonForm((p) => ({ ...p, grade: e.target.value }))} />
+              <select className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900" value={lessonForm.type} onChange={(e) => setLessonForm((p) => ({ ...p, type: e.target.value as "QUIZ" | "ASSIGNMENT" | "TRIAL" }))}>
+                <option value="QUIZ">QUIZ</option>
+                <option value="ASSIGNMENT">ASSIGNMENT</option>
+                <option value="TRIAL">TRIAL</option>
+              </select>
+              <input type="number" min={1} className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900" placeholder="Marks" value={lessonForm.marks} onChange={(e) => setLessonForm((p) => ({ ...p, marks: Number(e.target.value || 0) }))} />
+              <input type="datetime-local" className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 sm:col-span-2" value={lessonForm.due_at} onChange={(e) => setLessonForm((p) => ({ ...p, due_at: e.target.value }))} />
+              <textarea className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 sm:col-span-2" rows={4} placeholder="Instructions" value={lessonForm.instructions} onChange={(e) => setLessonForm((p) => ({ ...p, instructions: e.target.value }))} />
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700" disabled={isCreating} onClick={() => setShowCreateLessonModal(false)}>Cancel</button>
+              <button className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-60" disabled={isCreating} onClick={handleCreateLessonAssessment}>
+                {isCreating ? "Creating..." : "Create Lesson Assessment"}
+              </button>
+            </div>
           </div>
         </div>
       ) : null}

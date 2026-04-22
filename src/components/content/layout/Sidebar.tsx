@@ -15,15 +15,22 @@ type NavItem = {
 const navItems: NavItem[] = [
   { href: "/content/dashboard", label: "Dashboard", iconSrc: "/img/icons/dash-icon.png" },
   { href: "/content/subjects", label: "Subjects", iconSrc: "/img/icons/subject-icon.png" },
-  { href: "/content/assessments", label: "Assessment", iconSrc: "/img/icons/subject-icon.png" },
   { href: "/content/lessons", label: "Lessons", iconSrc: "/img/icons/lessons.png" },
+  { href: "/content/assessments", label: "Assessments", iconSrc: "/img/icons/subject-icon.png" },
   { href: "/content/stories", label: "Stories", iconSrc: "/img/icons/subject-icon.png" },
   { href: "/content/games", label: "Games", iconSrc: "/img/icons/subject-icon.png" },
   { href: "/content/teachers", label: "Teachers", iconSrc: "/img/icons/subject-icon.png" },
   { href: "/content/settings", label: "Settings", iconSrc: "/img/icons/settings.png" },
 ];
 
-const creatorVisibleRoutes = new Set(["/content/dashboard", "/content/subjects", "/content/lessons", "/content/games", "/content/settings"]);
+const creatorVisibleRoutes = new Set([
+  "/content/dashboard",
+  "/content/subjects",
+  "/content/lessons",
+  "/content/assessments",
+  "/content/games",
+  "/content/settings",
+]);
 
 function isActivePath(pathname: string, href: string) {
   if (href === "/content/dashboard") return pathname.startsWith("/content/dashboard") || pathname === "/content";

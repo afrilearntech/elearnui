@@ -27,8 +27,6 @@ export default function AssignSubjectToTeacherModal({
   const [subjectSearch, setSubjectSearch] = useState("");
   const [selectedTeacherId, setSelectedTeacherId] = useState<number | null>(null);
   const [selectedSubjectIds, setSelectedSubjectIds] = useState<Set<number>>(new Set());
-  const [showTeacherDropdown, setShowTeacherDropdown] = useState(false);
-  const [showSubjectDropdown, setShowSubjectDropdown] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -39,8 +37,6 @@ export default function AssignSubjectToTeacherModal({
       setSelectedSubjectIds(new Set());
       setTeacherSearch("");
       setSubjectSearch("");
-      setShowTeacherDropdown(false);
-      setShowSubjectDropdown(false);
     }
   }, [isOpen]);
 
@@ -112,7 +108,6 @@ export default function AssignSubjectToTeacherModal({
   const handleTeacherSelect = (teacher: TeacherRecord) => {
     setSelectedTeacherId(teacher.id);
     setTeacherSearch("");
-    setShowTeacherDropdown(false);
   };
 
   const handleSubjectToggle = (subjectId: number) => {
@@ -217,14 +212,13 @@ export default function AssignSubjectToTeacherModal({
                     type="text"
                     placeholder="Search by name, email, or phone..."
                     value={teacherSearch}
-                    onChange={(e) => {
-                      setTeacherSearch(e.target.value);
-                      setShowTeacherDropdown(true);
-                    }}
-                    onFocus={() => setShowTeacherDropdown(true)}
+                    onChange={(e) => setTeacherSearch(e.target.value)}
                     className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-gray-400 text-gray-900 bg-white placeholder:text-gray-400 text-sm sm:text-base"
                   />
                 </div>
+                <p className="mb-3 text-xs text-gray-500">
+                  Showing {filteredTeachers.length} teacher{filteredTeachers.length === 1 ? "" : "s"}
+                </p>
 
                 {/* Selected Teacher Display */}
                 {selectedTeacher && (
@@ -255,76 +249,43 @@ export default function AssignSubjectToTeacherModal({
                   </div>
                 )}
 
-                {/* Dropdown */}
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setShowTeacherDropdown(!showTeacherDropdown)}
-                    className={`w-full px-4 py-3.5 text-left border rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-gray-400 bg-white text-gray-900 flex items-center justify-between transition-all ${
-                      selectedTeacherId ? "border-gray-400 bg-gray-50" : "border-gray-300 hover:border-gray-400"
-                    }`}
-                  >
-                    <span className={selectedTeacherId ? "text-gray-900 font-medium" : "text-gray-400"}>
-                      {selectedTeacher
-                        ? `${selectedTeacher.profile.name}`
-                        : "Click to select a teacher..."}
-                    </span>
-                    <Icon
-                      icon="solar:alt-arrow-down-bold"
-                      className={`w-5 h-5 text-gray-400 transition-transform ${showTeacherDropdown ? "rotate-180" : ""}`}
-                    />
-                  </button>
-
-                  {showTeacherDropdown && (
-                    <>
-                      <div
-                        className="fixed inset-0 z-40"
-                        onClick={() => setShowTeacherDropdown(false)}
-                      />
-                      <div className="absolute z-50 mt-2 w-full bg-white border border-gray-200 rounded-lg shadow-xl max-h-80 overflow-y-auto">
-                        {isLoadingTeachers ? (
-                          <div className="p-6 text-center text-gray-500">
-                            <Icon icon="solar:loading-bold" className="w-6 h-6 animate-spin mx-auto mb-2" />
-                            <p className="text-sm">Loading teachers...</p>
+                <div className="rounded-lg border border-gray-200 bg-white max-h-80 overflow-y-auto divide-y divide-gray-100">
+                  {isLoadingTeachers ? (
+                    <div className="p-6 text-center text-gray-500">
+                      <Icon icon="solar:loading-bold" className="w-6 h-6 animate-spin mx-auto mb-2" />
+                      <p className="text-sm">Loading teachers...</p>
+                    </div>
+                  ) : filteredTeachers.length === 0 ? (
+                    <div className="p-6 text-center text-gray-500">
+                      <Icon icon="solar:user-cross-rounded-bold" className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                      <p className="text-sm">No teachers found</p>
+                    </div>
+                  ) : (
+                    filteredTeachers.map((teacher) => (
+                      <button
+                        key={teacher.id}
+                        type="button"
+                        onClick={() => handleTeacherSelect(teacher)}
+                        className={`w-full text-left px-5 py-4 hover:bg-gray-50 transition-colors ${
+                          selectedTeacherId === teacher.id ? "bg-gray-50 border-l-4 border-gray-500" : ""
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <p className="text-sm font-bold text-gray-900 truncate">{teacher.profile.name}</p>
+                              {selectedTeacherId === teacher.id && (
+                                <Icon icon="solar:check-circle-bold" className="w-5 h-5 text-gray-700 flex-shrink-0" />
+                              )}
+                            </div>
+                            <p className="text-xs text-gray-600 truncate">{teacher.profile.email}</p>
+                            {teacher.profile.phone && (
+                              <p className="text-xs text-gray-500 mt-1">Phone: {teacher.profile.phone}</p>
+                            )}
                           </div>
-                        ) : filteredTeachers.length === 0 ? (
-                          <div className="p-6 text-center text-gray-500">
-                            <Icon icon="solar:user-cross-rounded-bold" className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-                            <p className="text-sm">No teachers found</p>
-                          </div>
-                        ) : (
-                          <div className="divide-y divide-gray-100">
-                            {filteredTeachers.map((teacher) => (
-                              <button
-                                key={teacher.id}
-                                type="button"
-                                onClick={() => handleTeacherSelect(teacher)}
-                                className={`w-full text-left px-5 py-4 hover:bg-gray-50 transition-colors ${
-                                  selectedTeacherId === teacher.id ? "bg-gray-50 border-l-4 border-gray-400" : ""
-                                }`}
-                              >
-                                <div className="flex items-center justify-between">
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2 mb-1">
-                                      <p className="text-sm font-bold text-gray-900 truncate">
-                                        {teacher.profile.name}
-                                      </p>
-                                      {selectedTeacherId === teacher.id && (
-                                        <Icon icon="solar:check-circle-bold" className="w-5 h-5 text-gray-700 flex-shrink-0" />
-                                      )}
-                                    </div>
-                                    <p className="text-xs text-gray-600 truncate">{teacher.profile.email}</p>
-                                    {teacher.profile.phone && (
-                                      <p className="text-xs text-gray-500 mt-1">Phone: {teacher.profile.phone}</p>
-                                    )}
-                                  </div>
-                                </div>
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </>
+                        </div>
+                      </button>
+                    ))
                   )}
                 </div>
               </div>
@@ -352,14 +313,13 @@ export default function AssignSubjectToTeacherModal({
                       type="text"
                       placeholder="Search by name, description, or grade..."
                       value={subjectSearch}
-                      onChange={(e) => {
-                        setSubjectSearch(e.target.value);
-                        setShowSubjectDropdown(true);
-                      }}
-                      onFocus={() => setShowSubjectDropdown(true)}
+                      onChange={(e) => setSubjectSearch(e.target.value)}
                       className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-gray-400 text-gray-900 bg-white placeholder:text-gray-400 text-sm sm:text-base"
                     />
                   </div>
+                  <p className="mb-3 text-xs text-gray-500">
+                    Showing {filteredSubjects.length} subject{filteredSubjects.length === 1 ? "" : "s"}
+                  </p>
 
                   {/* Selection Summary */}
                   {selectedSubjectIds.size > 0 && (
@@ -406,86 +366,55 @@ export default function AssignSubjectToTeacherModal({
                     </div>
                   )}
 
-                  {/* Multi-Select Dropdown */}
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={() => setShowSubjectDropdown(!showSubjectDropdown)}
-                      className={`w-full px-4 py-3.5 text-left border rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-gray-400 bg-white text-gray-900 flex items-center justify-between transition-all min-h-[52px] ${
-                        selectedSubjectIds.size > 0 ? "border-gray-400 bg-gray-50" : "border-gray-300 hover:border-gray-400"
-                      }`}
-                    >
-                      <span className={selectedSubjectIds.size > 0 ? "text-gray-900 font-medium" : "text-gray-400"}>
-                        {selectedSubjectIds.size > 0
-                          ? `${selectedSubjectIds.size} subject${selectedSubjectIds.size !== 1 ? "s" : ""} selected`
-                          : "Click to select subjects..."}
-                      </span>
-                      <Icon
-                        icon="solar:alt-arrow-down-bold"
-                        className={`w-5 h-5 text-gray-400 transition-transform ${showSubjectDropdown ? "rotate-180" : ""}`}
-                      />
-                    </button>
-
-                    {showSubjectDropdown && (
-                      <>
-                        <div
-                          className="fixed inset-0 z-40"
-                          onClick={() => setShowSubjectDropdown(false)}
-                        />
-                        <div className="absolute z-50 mt-2 w-full bg-white border border-gray-200 rounded-lg shadow-xl max-h-96 overflow-y-auto">
-                          {isLoadingSubjects ? (
-                            <div className="p-6 text-center text-gray-500">
-                              <Icon icon="solar:loading-bold" className="w-6 h-6 animate-spin mx-auto mb-2" />
-                              <p className="text-sm">Loading subjects...</p>
+                  <div className="rounded-lg border border-gray-200 bg-white max-h-96 overflow-y-auto divide-y divide-gray-100">
+                    {isLoadingSubjects ? (
+                      <div className="p-6 text-center text-gray-500">
+                        <Icon icon="solar:loading-bold" className="w-6 h-6 animate-spin mx-auto mb-2" />
+                        <p className="text-sm">Loading subjects...</p>
+                      </div>
+                    ) : filteredSubjects.length === 0 ? (
+                      <div className="p-6 text-center text-gray-500">
+                        <Icon icon="solar:book-2-bold" className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                        <p className="text-sm">No subjects found</p>
+                      </div>
+                    ) : (
+                      filteredSubjects.map((subject) => {
+                        const isSelected = selectedSubjectIds.has(subject.id);
+                        return (
+                          <button
+                            key={subject.id}
+                            type="button"
+                            onClick={() => handleSubjectToggle(subject.id)}
+                            className={`w-full text-left px-5 py-4 hover:bg-gray-50 transition-colors ${
+                              isSelected ? "bg-gray-50 border-l-4 border-gray-500" : ""
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                  <p className="text-sm font-bold text-gray-900">{subject.name}</p>
+                                  <span className="text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded-md font-medium">
+                                    {subject.grade}
+                                  </span>
+                                  {isSelected && (
+                                    <Icon icon="solar:check-circle-bold" className="w-5 h-5 text-gray-700 flex-shrink-0" />
+                                  )}
+                                </div>
+                                <p className="text-xs text-gray-600 line-clamp-2 mt-1">{subject.description}</p>
+                              </div>
+                              <div className="flex-shrink-0">
+                                {isSelected ? (
+                                  <div className="w-6 h-6 bg-gray-600 rounded-full flex items-center justify-center">
+                                    <Icon icon="solar:check-bold" className="w-4 h-4 text-white" />
+                                  </div>
+                                ) : (
+                                  <div className="w-6 h-6 border-2 border-gray-300 rounded-full" />
+                                )}
+                              </div>
                             </div>
-                          ) : filteredSubjects.length === 0 ? (
-                            <div className="p-6 text-center text-gray-500">
-                              <Icon icon="solar:book-2-bold" className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-                              <p className="text-sm">No subjects found</p>
-                            </div>
-                          ) : (
-                            <div className="divide-y divide-gray-100">
-                              {filteredSubjects.map((subject) => {
-                                const isSelected = selectedSubjectIds.has(subject.id);
-                                return (
-                                  <button
-                                    key={subject.id}
-                                    type="button"
-                                    onClick={() => handleSubjectToggle(subject.id)}
-                                    className={`w-full text-left px-5 py-4 hover:bg-gray-50 transition-colors ${
-                                      isSelected ? "bg-gray-50 border-l-4 border-gray-400" : ""
-                                    }`}
-                                  >
-                                    <div className="flex items-center justify-between gap-3">
-                                      <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                          <p className="text-sm font-bold text-gray-900">{subject.name}</p>
-                                          <span className="text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded-md font-medium">
-                                            {subject.grade}
-                                          </span>
-                                          {isSelected && (
-                                            <Icon icon="solar:check-circle-bold" className="w-5 h-5 text-gray-700 flex-shrink-0" />
-                                          )}
-                                        </div>
-                                        <p className="text-xs text-gray-600 line-clamp-2 mt-1">{subject.description}</p>
-                                      </div>
-                                      <div className="flex-shrink-0">
-                                        {isSelected ? (
-                                          <div className="w-6 h-6 bg-gray-600 rounded-full flex items-center justify-center">
-                                            <Icon icon="solar:check-bold" className="w-4 h-4 text-white" />
-                                          </div>
-                                        ) : (
-                                          <div className="w-6 h-6 border-2 border-gray-300 rounded-full" />
-                                        )}
-                                      </div>
-                                    </div>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      </>
+                          </button>
+                        );
+                      })
                     )}
                   </div>
                 </div>

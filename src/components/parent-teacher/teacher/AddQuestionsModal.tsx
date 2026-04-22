@@ -393,7 +393,38 @@ export default function AddQuestionsModal({
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Answer <span className="text-red-500">*</span>
                   </label>
-                  {formData.type === "ESSAY" ? (
+                  {formData.type === "MULTIPLE_CHOICE" ? (
+                    <select
+                      name="answer"
+                      value={formData.answer}
+                      onChange={handleInputChange}
+                      className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white ${
+                        errors.answer ? "border-red-500" : "border-gray-300"
+                      }`}
+                    >
+                      <option value="">Select correct option</option>
+                      {(formData.options || [])
+                        .filter((opt) => opt.trim() !== "")
+                        .map((opt, idx) => (
+                          <option key={`${opt}-${idx}`} value={opt}>
+                            {opt}
+                          </option>
+                        ))}
+                    </select>
+                  ) : formData.type === "TRUE_FALSE" ? (
+                    <select
+                      name="answer"
+                      value={formData.answer}
+                      onChange={handleInputChange}
+                      className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white ${
+                        errors.answer ? "border-red-500" : "border-gray-300"
+                      }`}
+                    >
+                      <option value="">Select answer</option>
+                      <option value="True">True</option>
+                      <option value="False">False</option>
+                    </select>
+                  ) : formData.type === "ESSAY" ? (
                     <textarea
                       name="answer"
                       value={formData.answer}
@@ -413,11 +444,7 @@ export default function AddQuestionsModal({
                       className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-gray-900 text-gray-900 bg-white ${
                         errors.answer ? "border-red-500" : "border-gray-300"
                       }`}
-                      placeholder={
-                        formData.type === "TRUE_FALSE"
-                          ? "Enter 'True' or 'False'"
-                          : "Enter the answer..."
-                      }
+                      placeholder="Enter the answer..."
                     />
                   )}
                   {errors.answer && (

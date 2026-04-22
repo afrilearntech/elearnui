@@ -1157,6 +1157,73 @@ export async function getHeadTeacherLessonAssessments(): Promise<TeacherLessonAs
   return await apiRequest<TeacherLessonAssessment[]>('/headteacher/lesson-assessments/');
 }
 
+export interface AssessmentStatisticsSummary {
+  submissions: number;
+  total_score: number;
+  mean: number;
+  median: number;
+  mode: number;
+  range: string;
+  Q1: number;
+  Q3: number;
+  standard_deviation: number;
+  skewness_coefficient: number;
+}
+
+export interface AssessmentStatisticsChart {
+  labels: string[];
+  values: number[];
+}
+
+export interface AssessmentStatisticsResponse {
+  summary: AssessmentStatisticsSummary;
+  chart: AssessmentStatisticsChart;
+}
+
+export async function getHeadTeacherAssessmentStatistics(params: {
+  general_assessment_id?: number;
+  lesson_assessment_id?: number;
+}): Promise<AssessmentStatisticsResponse> {
+  const hasGeneral = typeof params.general_assessment_id === "number";
+  const hasLesson = typeof params.lesson_assessment_id === "number";
+
+  if ((hasGeneral && hasLesson) || (!hasGeneral && !hasLesson)) {
+    throw new ApiClientError("Provide exactly one of general_assessment_id or lesson_assessment_id.", 400);
+  }
+
+  const search = new URLSearchParams();
+  if (hasGeneral) {
+    search.set("general_assessment_id", String(params.general_assessment_id));
+  }
+  if (hasLesson) {
+    search.set("lesson_assessment_id", String(params.lesson_assessment_id));
+  }
+
+  return await apiRequest<AssessmentStatisticsResponse>(`/headteacher/assessment-statistics/?${search.toString()}`);
+}
+
+export async function getTeacherAssessmentStatistics(params: {
+  general_assessment_id?: number;
+  lesson_assessment_id?: number;
+}): Promise<AssessmentStatisticsResponse> {
+  const hasGeneral = typeof params.general_assessment_id === "number";
+  const hasLesson = typeof params.lesson_assessment_id === "number";
+
+  if ((hasGeneral && hasLesson) || (!hasGeneral && !hasLesson)) {
+    throw new ApiClientError("Provide exactly one of general_assessment_id or lesson_assessment_id.", 400);
+  }
+
+  const search = new URLSearchParams();
+  if (hasGeneral) {
+    search.set("general_assessment_id", String(params.general_assessment_id));
+  }
+  if (hasLesson) {
+    search.set("lesson_assessment_id", String(params.lesson_assessment_id));
+  }
+
+  return await apiRequest<AssessmentStatisticsResponse>(`/teacher/assessment-statistics/?${search.toString()}`);
+}
+
 export interface CreateLessonAssessmentRequest {
   lesson: number;
   type: "QUIZ" | "ASSIGNMENT";

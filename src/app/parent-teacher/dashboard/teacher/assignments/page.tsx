@@ -7,12 +7,16 @@ import {
   getTeacherLessonAssessments,
   getHeadTeacherLessonAssessments,
   getHeadTeacherGeneralAssessments,
+  getHeadTeacherAssessmentStatistics,
+  getTeacherAssessmentStatistics,
   TeacherLessonAssessment,
   GeneralAssessment,
+  AssessmentStatisticsResponse,
 } from "@/lib/api/parent-teacher/teacher";
 import { showErrorToast } from "@/lib/toast";
 import CreateAssignmentModal from "@/components/parent-teacher/teacher/CreateAssignmentModal";
 import AddQuestionsModal from "@/components/parent-teacher/teacher/AddQuestionsModal";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 const getStatusColor = (status: string) => {
   switch (status.toUpperCase()) {
@@ -41,6 +45,8 @@ const formatDate = (dateString: string) => {
 };
 
 type AssessmentTab = "lesson" | "general";
+type SortDirection = "asc" | "desc";
+type SortKey = "title" | "lesson_or_grade" | "type" | "marks" | "due_at" | "status" | "created_at";
 
 type UnifiedAssessment = {
   id: number;
@@ -72,8 +78,14 @@ export default function AssignmentsPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isQuestionsModalOpen, setIsQuestionsModalOpen] = useState(false);
   const [selectedAssessment, setSelectedAssessment] = useState<UnifiedAssessment | null>(null);
+  const [selectedStatsAssessment, setSelectedStatsAssessment] = useState<UnifiedAssessment | null>(null);
+  const [statsData, setStatsData] = useState<AssessmentStatisticsResponse | null>(null);
+  const [isStatsLoading, setIsStatsLoading] = useState(false);
+  const [statsError, setStatsError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const pageSize = 10;
+  const [sortKey, setSortKey] = useState<SortKey>("created_at");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
   const mapLessonAssessments = (rows: TeacherLessonAssessment[]): UnifiedAssessment[] =>
     rows.map((item) => ({
@@ -174,10 +186,56 @@ export default function AssignmentsPage() {
     });
   }, [currentAssessments, search, selectedStatus, selectedType, selectedGrade]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredAssessments.length / pageSize));
+  const sortedAssessments = useMemo(() => {
+    const statusRank: Record<string, number> = {
+      APPROVED: 5,
+      PUBLISHED: 4,
+      PENDING: 3,
+      DRAFT: 2,
+      REJECTED: 1,
+    };
+
+    const list = [...filteredAssessments];
+    list.sort((a, b) => {
+      let comparison = 0;
+      switch (sortKey) {
+        case "title":
+          comparison = a.title.localeCompare(b.title, undefined, { sensitivity: "base" });
+          break;
+        case "lesson_or_grade": {
+          if (activeTab === "lesson") {
+            comparison = (a.lesson ?? 0) - (b.lesson ?? 0);
+          } else {
+            comparison = (a.grade ?? "").localeCompare(b.grade ?? "", undefined, { sensitivity: "base" });
+          }
+          break;
+        }
+        case "type":
+          comparison = a.type.localeCompare(b.type, undefined, { sensitivity: "base" });
+          break;
+        case "marks":
+          comparison = a.marks - b.marks;
+          break;
+        case "due_at":
+          comparison = new Date(a.due_at).getTime() - new Date(b.due_at).getTime();
+          break;
+        case "status":
+          comparison = (statusRank[a.status.toUpperCase()] ?? 0) - (statusRank[b.status.toUpperCase()] ?? 0);
+          break;
+        case "created_at":
+        default:
+          comparison = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+          break;
+      }
+      return sortDirection === "asc" ? comparison : -comparison;
+    });
+    return list;
+  }, [filteredAssessments, sortKey, sortDirection, activeTab]);
+
+  const totalPages = Math.max(1, Math.ceil(sortedAssessments.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const start = (currentPage - 1) * pageSize;
-  const pagedAssessments = filteredAssessments.slice(start, start + pageSize);
+  const pagedAssessments = sortedAssessments.slice(start, start + pageSize);
 
   const statuses = ["All", "DRAFT", "PUBLISHED", "PENDING", "APPROVED", "REJECTED"];
   const types = [
@@ -222,6 +280,60 @@ export default function AssignmentsPage() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDirection((prevDirection) => (prevDirection === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDirection("asc");
+    }
+    setPage(1);
+  };
+
+  const renderSortIcon = (key: SortKey) => {
+    if (sortKey !== key) {
+      return <Icon icon="solar:sort-vertical-line-duotone" className="h-4 w-4 text-gray-400" />;
+    }
+    return sortDirection === "asc" ? (
+      <Icon icon="solar:sort-from-bottom-to-top-bold" className="h-4 w-4 text-emerald-600" />
+    ) : (
+      <Icon icon="solar:sort-from-top-to-bottom-bold" className="h-4 w-4 text-emerald-600" />
+    );
+  };
+
+  const handleOpenStatistics = async (assessment: UnifiedAssessment) => {
+    setSelectedStatsAssessment(assessment);
+    setIsStatsLoading(true);
+    setStatsError(null);
+    setStatsData(null);
+
+    try {
+      const payload =
+        assessment.scope === "general"
+          ? { general_assessment_id: assessment.id }
+          : { lesson_assessment_id: assessment.id };
+      const response = isHeadTeacher
+        ? await getHeadTeacherAssessmentStatistics(payload)
+        : await getTeacherAssessmentStatistics(payload);
+      setStatsData(response);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to load assessment statistics.";
+      setStatsError(message);
+      showErrorToast(message);
+    } finally {
+      setIsStatsLoading(false);
+    }
+  };
+
+  const chartData = useMemo(() => {
+    if (!statsData) return [];
+    return statsData.chart.labels.map((label, index) => ({
+      label,
+      count: statsData.chart.values[index] ?? 0,
+    }));
+  }, [statsData]);
+
   if (isLoading) {
     return (
       <DashboardLayout>
@@ -238,13 +350,107 @@ export default function AssignmentsPage() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
+        {isHeadTeacher && selectedStatsAssessment ? (
+          <section className="rounded-2xl border border-indigo-100 bg-gradient-to-br from-white to-indigo-50/40 p-5 sm:p-6">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs font-semibold tracking-wide text-indigo-600 uppercase">Assessment Statistics</p>
+                <h2 className="mt-1 text-xl font-bold text-gray-900">{selectedStatsAssessment.title}</h2>
+                <p className="mt-1 text-sm text-gray-600">
+                  {selectedStatsAssessment.scope === "general" ? "General assessment" : "Lesson assessment"}{" "}
+                  #{selectedStatsAssessment.id}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setSelectedStatsAssessment(null);
+                  setStatsData(null);
+                  setStatsError(null);
+                }}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+              >
+                <Icon icon="solar:close-circle-bold" className="h-4 w-4" />
+                Close Statistics
+              </button>
+            </div>
+
+            {isStatsLoading ? (
+              <div className="mt-6 rounded-xl border border-gray-200 bg-white p-8 text-center">
+                <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-indigo-500 border-t-transparent" />
+                <p className="mt-3 text-sm text-gray-600">Loading statistics...</p>
+              </div>
+            ) : statsError ? (
+              <div className="mt-6 rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">{statsError}</div>
+            ) : statsData ? (
+              <div className="mt-6 space-y-6">
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                  {[
+                    { label: "Submissions", value: statsData.summary.submissions },
+                    { label: "Mean", value: statsData.summary.mean },
+                    { label: "Median", value: statsData.summary.median },
+                    { label: "Mode", value: statsData.summary.mode },
+                    { label: "Std. Deviation", value: statsData.summary.standard_deviation },
+                  ].map((item) => (
+                    <div key={item.label} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                      <p className="text-xs font-semibold tracking-wide text-gray-500 uppercase">{item.label}</p>
+                      <p className="mt-2 text-2xl font-bold text-gray-900">{item.value}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid gap-4 lg:grid-cols-3">
+                  <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                    <p className="text-xs font-semibold tracking-wide text-gray-500 uppercase">Score Range</p>
+                    <p className="mt-2 text-lg font-semibold text-gray-900">{statsData.summary.range}</p>
+                  </div>
+                  <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                    <p className="text-xs font-semibold tracking-wide text-gray-500 uppercase">Q1 / Q3</p>
+                    <p className="mt-2 text-lg font-semibold text-gray-900">
+                      {statsData.summary.Q1} / {statsData.summary.Q3}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                    <p className="text-xs font-semibold tracking-wide text-gray-500 uppercase">Skewness</p>
+                    <p className="mt-2 text-lg font-semibold text-gray-900">{statsData.summary.skewness_coefficient}</p>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5">
+                  <div className="mb-4 flex items-center justify-between">
+                    <h3 className="text-base font-semibold text-gray-900">Distribution of Scores</h3>
+                    <div className="inline-flex items-center gap-2 text-xs text-gray-600">
+                      <span className="h-2.5 w-2.5 rounded-full bg-indigo-500" />
+                      Learner count per score bin
+                    </div>
+                  </div>
+                  <div className="h-72 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={chartData} margin={{ top: 10, right: 16, left: 0, bottom: 10 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                        <XAxis dataKey="label" tick={{ fill: "#4B5563", fontSize: 12 }} />
+                        <YAxis allowDecimals={false} tick={{ fill: "#4B5563", fontSize: 12 }} />
+                        <Tooltip
+                          cursor={{ fill: "rgba(99, 102, 241, 0.08)" }}
+                          contentStyle={{ borderRadius: 10, border: "1px solid #E5E7EB" }}
+                          formatter={(value) => [value, "Submissions"]}
+                        />
+                        <Bar dataKey="count" fill="#6366F1" radius={[6, 6, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+
         <div className="flex items-center justify-between flex-col sm:flex-row gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Assessments</h1>
             <p className="text-gray-600 mt-1">
               {isHeadTeacher
                 ? "Track lesson and general assessments across your school"
-                : "Manage and view all lesson assessments"}
+                : "Manage and view all lesson assessments with statistics"}
             </p>
           </div>
           {!isHeadTeacher && (
@@ -366,25 +572,67 @@ export default function AssignmentsPage() {
                   <thead>
                     <tr className="border-b border-gray-200">
                       <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">
-                        Title
+                        <button
+                          type="button"
+                          onClick={() => handleSort("title")}
+                          className="inline-flex items-center gap-1 hover:text-gray-900"
+                        >
+                          Title {renderSortIcon("title")}
+                        </button>
                       </th>
                       <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">
-                        {activeTab === "lesson" ? "Lesson ID" : "Grade"}
+                        <button
+                          type="button"
+                          onClick={() => handleSort("lesson_or_grade")}
+                          className="inline-flex items-center gap-1 hover:text-gray-900"
+                        >
+                          {activeTab === "lesson" ? "Lesson ID" : "Grade"} {renderSortIcon("lesson_or_grade")}
+                        </button>
                       </th>
                       <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">
-                        Type
+                        <button
+                          type="button"
+                          onClick={() => handleSort("type")}
+                          className="inline-flex items-center gap-1 hover:text-gray-900"
+                        >
+                          Type {renderSortIcon("type")}
+                        </button>
                       </th>
                       <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">
-                        Marks
+                        <button
+                          type="button"
+                          onClick={() => handleSort("marks")}
+                          className="inline-flex items-center gap-1 hover:text-gray-900"
+                        >
+                          Marks {renderSortIcon("marks")}
+                        </button>
                       </th>
                       <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">
-                        Due Date
+                        <button
+                          type="button"
+                          onClick={() => handleSort("due_at")}
+                          className="inline-flex items-center gap-1 hover:text-gray-900"
+                        >
+                          Due Date {renderSortIcon("due_at")}
+                        </button>
                       </th>
                       <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">
-                        Status
+                        <button
+                          type="button"
+                          onClick={() => handleSort("status")}
+                          className="inline-flex items-center gap-1 hover:text-gray-900"
+                        >
+                          Status {renderSortIcon("status")}
+                        </button>
                       </th>
                       <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">
-                        Created
+                        <button
+                          type="button"
+                          onClick={() => handleSort("created_at")}
+                          className="inline-flex items-center gap-1 hover:text-gray-900"
+                        >
+                          Created {renderSortIcon("created_at")}
+                        </button>
                       </th>
                       <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">
                         Actions
@@ -435,17 +683,44 @@ export default function AssignmentsPage() {
                           <span className="text-sm text-gray-600">{formatDate(assessment.created_at)}</span>
                         </td>
                         <td className="py-4 px-4">
-                          <button
-                            onClick={() => {
-                              setSelectedAssessment(assessment);
-                              setIsQuestionsModalOpen(true);
-                            }}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            disabled={isHeadTeacher}
-                          >
-                            <Icon icon="solar:question-circle-bold" className="w-4 h-4" />
-                            <span>{isHeadTeacher ? "View Only" : "Add Questions"}</span>
-                          </button>
+                          {isHeadTeacher ? (
+                            assessment.status.toUpperCase() === "APPROVED" ? (
+                              <button
+                                onClick={() => void handleOpenStatistics(assessment)}
+                                className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 transition-colors hover:bg-indigo-100"
+                              >
+                                <Icon icon="solar:chart-square-bold" className="h-4 w-4" />
+                                Statistics
+                              </button>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-500">
+                                <Icon icon="solar:lock-keyhole-minimalistic-bold" className="h-4 w-4" />
+                                Await Approval
+                              </span>
+                            )
+                          ) : (
+                            <div className="flex flex-wrap items-center gap-2">
+                              <button
+                                onClick={() => {
+                                  setSelectedAssessment(assessment);
+                                  setIsQuestionsModalOpen(true);
+                                }}
+                                className="inline-flex items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-100"
+                              >
+                                <Icon icon="solar:question-circle-bold" className="w-4 h-4" />
+                                <span>Add Questions</span>
+                              </button>
+                              {assessment.status.toUpperCase() === "APPROVED" ? (
+                                <button
+                                  onClick={() => void handleOpenStatistics(assessment)}
+                                  className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 transition-colors hover:bg-indigo-100"
+                                >
+                                  <Icon icon="solar:chart-square-bold" className="h-4 w-4" />
+                                  Statistics
+                                </button>
+                              ) : null}
+                            </div>
+                          )}
                         </td>
                       </tr>
                     ))}

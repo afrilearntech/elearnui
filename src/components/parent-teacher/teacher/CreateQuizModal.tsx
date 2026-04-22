@@ -101,7 +101,7 @@ export default function CreateQuizModal({ isOpen, onClose, onSuccess }: CreateQu
         instructions: formData.instructions.trim(),
         marks: Number(formData.marks),
         due_at: new Date(formData.due_at).toISOString(),
-        status: "PENDING",
+        status: "APPROVED",
         moderation_comment: "",
       });
 

@@ -7,6 +7,7 @@ import {
   moderateContent,
   ModerateAction,
 } from "@/lib/api/content/lessons";
+import { createLessonAssessment as createContentLessonAssessment } from "@/lib/api/content/assessments";
 import Image from "@/components/images/SafeImage";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -131,6 +132,21 @@ export default function LessonsPage() {
   const [userRole, setUserRole] = React.useState<string>("CONTENTCREATOR");
   const [deleteTarget, setDeleteTarget] = React.useState<LessonRow | null>(null);
   const [isDeleting, setIsDeleting] = React.useState(false);
+  const [isCreateAssessmentModalOpen, setIsCreateAssessmentModalOpen] = React.useState(false);
+  const [isCreatingAssessment, setIsCreatingAssessment] = React.useState(false);
+  const [assessmentFormErrors, setAssessmentFormErrors] = React.useState<Record<string, string>>({});
+  const [assessmentLessonSearch, setAssessmentLessonSearch] = React.useState("");
+  const [assessmentLessonGradeFilter, setAssessmentLessonGradeFilter] = React.useState("All");
+  const [assessmentLessonSubjectFilter, setAssessmentLessonSubjectFilter] = React.useState("All");
+  const [assessmentForm, setAssessmentForm] = React.useState({
+    lesson: "",
+    type: "QUIZ" as "QUIZ" | "ASSIGNMENT" | "TRIAL",
+    title: "",
+    instructions: "",
+    marks: "",
+    due_at: "",
+    grade: "",
+  });
   const isModerationProcessing = moderationLoadingAction !== null;
   const isValidator = userRole === "CONTENTVALIDATOR";
 
@@ -450,6 +466,99 @@ export default function LessonsPage() {
     }
   }, [deleteTarget]);
 
+  const lessonPickerGradeOptions = React.useMemo(
+    () => ["All", ...Array.from(new Set(lessons.map((lesson) => lesson.grade).filter((g) => g && g !== "Grade -")))],
+    [lessons],
+  );
+
+  const lessonPickerSubjectOptions = React.useMemo(
+    () => ["All", ...Array.from(new Set(lessons.map((lesson) => lesson.subject).filter((s) => s && s !== "Subject -")))],
+    [lessons],
+  );
+
+  const filteredLessonsForAssessment = React.useMemo(() => {
+    const needle = assessmentLessonSearch.trim().toLowerCase();
+    return lessons.filter((lesson) => {
+      const matchesSearch =
+        !needle ||
+        lesson.title.toLowerCase().includes(needle) ||
+        lesson.description.toLowerCase().includes(needle) ||
+        lesson.subject.toLowerCase().includes(needle) ||
+        lesson.grade.toLowerCase().includes(needle);
+      const matchesGrade =
+        assessmentLessonGradeFilter === "All" || lesson.grade === assessmentLessonGradeFilter;
+      const matchesSubject =
+        assessmentLessonSubjectFilter === "All" || lesson.subject === assessmentLessonSubjectFilter;
+      return matchesSearch && matchesGrade && matchesSubject;
+    });
+  }, [lessons, assessmentLessonSearch, assessmentLessonGradeFilter, assessmentLessonSubjectFilter]);
+
+  const selectedLessonForAssessment = React.useMemo(
+    () => lessons.find((lesson) => lesson.id === assessmentForm.lesson) ?? null,
+    [lessons, assessmentForm.lesson],
+  );
+
+  const resetAssessmentForm = () => {
+    setAssessmentForm({
+      lesson: "",
+      type: "QUIZ",
+      title: "",
+      instructions: "",
+      marks: "",
+      due_at: "",
+      grade: "",
+    });
+    setAssessmentLessonSearch("");
+    setAssessmentLessonGradeFilter("All");
+    setAssessmentLessonSubjectFilter("All");
+    setAssessmentFormErrors({});
+  };
+
+  const handleCreateAssessmentSubmit = async () => {
+    const nextErrors: Record<string, string> = {};
+    if (!assessmentForm.lesson) nextErrors.lesson = "Please select a lesson";
+    if (!assessmentForm.title.trim()) nextErrors.title = "Title is required";
+    if (!assessmentForm.instructions.trim()) nextErrors.instructions = "Instructions are required";
+    if (!assessmentForm.marks || Number(assessmentForm.marks) <= 0) nextErrors.marks = "Marks must be greater than 0";
+    if (!assessmentForm.due_at) nextErrors.due_at = "Due date is required";
+    if (!assessmentForm.grade.trim()) nextErrors.grade = "Grade is required";
+    if (Object.keys(nextErrors).length > 0) {
+      setAssessmentFormErrors(nextErrors);
+      return;
+    }
+
+    setIsCreatingAssessment(true);
+    try {
+      const token = localStorage.getItem("auth_token");
+      if (!token) {
+        await notifyError("Missing authentication token. Please sign in again.");
+        return;
+      }
+      await createContentLessonAssessment(
+        {
+          lesson: Number(assessmentForm.lesson),
+          type: assessmentForm.type,
+          title: assessmentForm.title.trim(),
+          instructions: assessmentForm.instructions.trim(),
+          marks: Number(assessmentForm.marks),
+          due_at: new Date(assessmentForm.due_at).toISOString(),
+          grade: assessmentForm.grade.trim(),
+          status: "DRAFT",
+          moderation_comment: "",
+        },
+        token,
+      );
+      await notifySuccess("Lesson assessment created successfully.");
+      setIsCreateAssessmentModalOpen(false);
+      resetAssessmentForm();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to create lesson assessment.";
+      await notifyError(message);
+    } finally {
+      setIsCreatingAssessment(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -460,13 +569,21 @@ export default function LessonsPage() {
           </p>
         </div>
         {!isValidator ? (
-          <Link
-            href="/content/lessons/create"
-            className="inline-flex items-center justify-center gap-2 rounded-full bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow hover:bg-emerald-700 transition"
-          >
-            <span className="text-lg leading-none">+</span>
-            Create Lesson
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/content/assessments"
+              className="inline-flex items-center justify-center gap-2 rounded-full bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow transition hover:bg-indigo-700"
+            >
+              Manage Assessments
+            </Link>
+            <Link
+              href="/content/lessons/create"
+              className="inline-flex items-center justify-center gap-2 rounded-full bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow hover:bg-emerald-700 transition"
+            >
+              <span className="text-lg leading-none">+</span>
+              Create Lesson
+            </Link>
+          </div>
         ) : null}
       </div>
 
@@ -1097,6 +1214,147 @@ export default function LessonsPage() {
                 ) : (
                   "Delete"
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {!isValidator && isCreateAssessmentModalOpen ? (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center bg-black/60 px-4" onClick={(e) => e.target === e.currentTarget && !isCreatingAssessment && setIsCreateAssessmentModalOpen(false)}>
+          <div className="w-full max-w-4xl rounded-2xl bg-white p-6 shadow-2xl max-h-[92vh] overflow-y-auto">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-xl font-semibold text-gray-900">Create Lesson Assessment</h3>
+                <p className="text-sm text-gray-500">Pick a lesson, then set assessment details.</p>
+              </div>
+              <button onClick={() => setIsCreateAssessmentModalOpen(false)} className="rounded-full p-1 text-gray-500 hover:bg-gray-100">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="mt-5 grid gap-3 md:grid-cols-3">
+              <input
+                value={assessmentLessonSearch}
+                onChange={(e) => setAssessmentLessonSearch(e.target.value)}
+                placeholder="Search lesson, subject or grade..."
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900"
+              />
+              <select
+                value={assessmentLessonGradeFilter}
+                onChange={(e) => setAssessmentLessonGradeFilter(e.target.value)}
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900"
+              >
+                {lessonPickerGradeOptions.map((g) => (
+                  <option key={g} value={g}>{g === "All" ? "All Grades" : g}</option>
+                ))}
+              </select>
+              <select
+                value={assessmentLessonSubjectFilter}
+                onChange={(e) => setAssessmentLessonSubjectFilter(e.target.value)}
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900"
+              >
+                {lessonPickerSubjectOptions.map((s) => (
+                  <option key={s} value={s}>{s === "All" ? "All Subjects" : s}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className={`mt-4 rounded-xl border ${assessmentFormErrors.lesson ? "border-rose-300" : "border-gray-200"} max-h-64 overflow-y-auto`}>
+              {filteredLessonsForAssessment.length === 0 ? (
+                <p className="p-4 text-sm text-gray-500">No lessons match your filters.</p>
+              ) : (
+                filteredLessonsForAssessment.map((lesson) => (
+                  <button
+                    key={lesson.id}
+                    type="button"
+                    onClick={() => {
+                      setAssessmentForm((prev) => ({
+                        ...prev,
+                        lesson: lesson.id,
+                        grade: lesson.grade && lesson.grade !== "Grade -" ? lesson.grade.toUpperCase().replace("GRADE ", "GRADE ") : prev.grade,
+                        title: prev.title || `${lesson.title} Assessment`,
+                      }));
+                      setAssessmentFormErrors((prev) => ({ ...prev, lesson: "" }));
+                    }}
+                    className={`w-full border-b border-gray-100 px-4 py-3 text-left hover:bg-gray-50 ${assessmentForm.lesson === lesson.id ? "bg-indigo-50" : ""}`}
+                  >
+                    <p className="font-semibold text-gray-900">{lesson.title}</p>
+                    <p className="text-xs text-gray-500">{lesson.subject} • {lesson.grade}</p>
+                  </button>
+                ))
+              )}
+            </div>
+            {assessmentFormErrors.lesson ? <p className="mt-1 text-xs text-rose-600">{assessmentFormErrors.lesson}</p> : null}
+
+            {selectedLessonForAssessment ? (
+              <p className="mt-3 text-sm text-gray-600">Selected lesson: <span className="font-semibold text-gray-900">{selectedLessonForAssessment.title}</span></p>
+            ) : null}
+
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
+              <input
+                value={assessmentForm.title}
+                onChange={(e) => setAssessmentForm((prev) => ({ ...prev, title: e.target.value }))}
+                placeholder="Assessment title"
+                className={`rounded-lg border px-3 py-2 text-sm text-gray-900 ${assessmentFormErrors.title ? "border-rose-300" : "border-gray-300"}`}
+              />
+              <select
+                value={assessmentForm.type}
+                onChange={(e) => setAssessmentForm((prev) => ({ ...prev, type: e.target.value as "QUIZ" | "ASSIGNMENT" | "TRIAL" }))}
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900"
+              >
+                <option value="QUIZ">Quiz</option>
+                <option value="ASSIGNMENT">Assignment</option>
+                <option value="TRIAL">Trial</option>
+              </select>
+              <input
+                value={assessmentForm.grade}
+                onChange={(e) => setAssessmentForm((prev) => ({ ...prev, grade: e.target.value }))}
+                placeholder="Grade (e.g. GRADE 3)"
+                className={`rounded-lg border px-3 py-2 text-sm text-gray-900 ${assessmentFormErrors.grade ? "border-rose-300" : "border-gray-300"}`}
+              />
+              <input
+                type="number"
+                min={1}
+                value={assessmentForm.marks}
+                onChange={(e) => setAssessmentForm((prev) => ({ ...prev, marks: e.target.value }))}
+                placeholder="Marks"
+                className={`rounded-lg border px-3 py-2 text-sm text-gray-900 ${assessmentFormErrors.marks ? "border-rose-300" : "border-gray-300"}`}
+              />
+              <input
+                type="datetime-local"
+                value={assessmentForm.due_at}
+                onChange={(e) => setAssessmentForm((prev) => ({ ...prev, due_at: e.target.value }))}
+                className={`rounded-lg border px-3 py-2 text-sm text-gray-900 md:col-span-2 ${assessmentFormErrors.due_at ? "border-rose-300" : "border-gray-300"}`}
+              />
+              <textarea
+                value={assessmentForm.instructions}
+                onChange={(e) => setAssessmentForm((prev) => ({ ...prev, instructions: e.target.value }))}
+                rows={4}
+                placeholder="Assessment instructions"
+                className={`rounded-lg border px-3 py-2 text-sm text-gray-900 md:col-span-2 ${assessmentFormErrors.instructions ? "border-rose-300" : "border-gray-300"}`}
+              />
+            </div>
+
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                onClick={() => {
+                  setIsCreateAssessmentModalOpen(false);
+                  resetAssessmentForm();
+                }}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                disabled={isCreatingAssessment}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void handleCreateAssessmentSubmit()}
+                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
+                disabled={isCreatingAssessment}
+              >
+                {isCreatingAssessment ? "Creating..." : "Create Assessment"}
               </button>
             </div>
           </div>
