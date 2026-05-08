@@ -117,15 +117,6 @@ export default function ElementaryStoriesPage() {
     [stories]
   );
 
-  if (!authReady || isPending) {
-    return (
-      <StudentLoadingScreen
-        title="Loading magical stories..."
-        subtitle="Bringing colorful adventures to your reading castle."
-      />
-    );
-  }
-
   return (
     <div className="min-h-screen">
       <ElementaryNavbar onMenuToggle={() => setIsMobileMenuOpen((v) => !v)} />
@@ -137,6 +128,12 @@ export default function ElementaryStoriesPage() {
         />
 
         <main className="flex-1 overflow-x-hidden bg-gradient-to-br from-[#FFFBEB] via-[#ECFEFF] to-[#F3E8FF] sm:pl-[280px] lg:pl-[320px]">
+          {!authReady || isPending ? (
+            <StudentLoadingScreen
+              title="Loading magical stories..."
+              subtitle="Bringing colorful adventures to your reading castle."
+            />
+          ) : (
           <div className="mx-4 mt-8 space-y-6 sm:mx-8 lg:mx-10">
             <section className="rounded-3xl border border-white/70 bg-white/70 p-6 shadow-lg backdrop-blur">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -221,6 +218,7 @@ export default function ElementaryStoriesPage() {
               </section>
             )}
           </div>
+          )}
         </main>
       </div>
     </div>

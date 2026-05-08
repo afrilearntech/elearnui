@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
@@ -191,6 +191,8 @@ export default function ElementaryStoryReaderPage() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [isReadAloudModalOpen, setIsReadAloudModalOpen] = useState(false);
+  const ignoreSpeechErrorsRef = useRef(false);
+  const stopRequestedRef = useRef(false);
 
   const {
     data: story,
@@ -230,13 +232,17 @@ export default function ElementaryStoryReaderPage() {
     const loadVoices = () => {
       const loaded = window.speechSynthesis.getVoices();
       if (loaded.length === 0) return;
-      setVoices(loaded);
+      const englishVoices = loaded.filter((voice) =>
+        voice.lang.toLowerCase().startsWith('en')
+      );
+      setVoices(englishVoices);
       if (!voiceUri) {
         const preferred =
-          loaded.find((voice) => voice.lang.toLowerCase().startsWith('en') && /female|samantha|zira|karen|susan/i.test(voice.name)) ||
-          loaded.find((voice) => voice.lang.toLowerCase().startsWith('en')) ||
-          loaded[0];
+          englishVoices.find((voice) => /female|samantha|zira|karen|susan/i.test(voice.name)) ||
+          englishVoices[0];
         if (preferred) setVoiceUri(preferred.voiceURI);
+      } else if (!englishVoices.some((voice) => voice.voiceURI === voiceUri)) {
+        setVoiceUri(englishVoices[0]?.voiceURI || '');
       }
     };
 
@@ -272,15 +278,21 @@ export default function ElementaryStoryReaderPage() {
   const startReadAloud = () => {
     if (typeof window === 'undefined' || !storySpeechText) return;
     const synth = window.speechSynthesis;
+    ignoreSpeechErrorsRef.current = true;
     synth.cancel();
+    setTimeout(() => {
+      ignoreSpeechErrorsRef.current = false;
+    }, 100);
 
     const utterance = new SpeechSynthesisUtterance(storySpeechText);
+    utterance.lang = selectedVoice?.lang || 'en-US';
     utterance.rate = rate;
     utterance.pitch = 1;
     utterance.volume = 1;
     if (selectedVoice) utterance.voice = selectedVoice;
 
     utterance.onstart = () => {
+      stopRequestedRef.current = false;
       setIsSpeaking(true);
       setIsPaused(false);
       if (isEnabled) announce('Read aloud started.', 'polite');
@@ -294,11 +306,23 @@ export default function ElementaryStoryReaderPage() {
     utterance.onend = () => {
       setIsSpeaking(false);
       setIsPaused(false);
+      ignoreSpeechErrorsRef.current = false;
       if (isEnabled) announce('Read aloud finished.', 'polite');
     };
-    utterance.onerror = () => {
+    utterance.onerror = (event) => {
       setIsSpeaking(false);
       setIsPaused(false);
+      const speechError = (event as SpeechSynthesisErrorEvent).error;
+      if (
+        stopRequestedRef.current ||
+        ignoreSpeechErrorsRef.current ||
+        speechError === 'interrupted' ||
+        speechError === 'canceled'
+      ) {
+        stopRequestedRef.current = false;
+        ignoreSpeechErrorsRef.current = false;
+        return;
+      }
       showErrorToast('Read aloud failed on this browser voice. Try another voice.');
     };
 
@@ -320,19 +344,16 @@ export default function ElementaryStoryReaderPage() {
 
   const stopReadAloud = () => {
     if (typeof window === 'undefined') return;
+    stopRequestedRef.current = true;
+    ignoreSpeechErrorsRef.current = true;
     window.speechSynthesis.cancel();
     setIsSpeaking(false);
     setIsPaused(false);
+    setTimeout(() => {
+      ignoreSpeechErrorsRef.current = false;
+      stopRequestedRef.current = false;
+    }, 100);
   };
-
-  if (!authReady || isPending) {
-    return (
-      <StudentLoadingScreen
-        title="Opening your story..."
-        subtitle="Preparing a comfy reading experience."
-      />
-    );
-  }
 
   return (
     <div className="min-h-screen">
@@ -345,6 +366,12 @@ export default function ElementaryStoryReaderPage() {
         />
 
         <main className="flex-1 overflow-x-hidden bg-gradient-to-br from-[#FFF7ED] via-[#ECFEFF] to-[#EEF2FF] sm:pl-[280px] lg:pl-[320px]">
+          {!authReady || isPending ? (
+            <StudentLoadingScreen
+              title="Opening your story..."
+              subtitle="Preparing a comfy reading experience."
+            />
+          ) : (
           <div className="mx-4 mt-6 space-y-5 pb-10 sm:mx-8 lg:mx-10">
             <div className="flex flex-wrap items-center gap-2">
               <Link
@@ -497,6 +524,7 @@ export default function ElementaryStoryReaderPage() {
               </>
             )}
           </div>
+          )}
         </main>
       </div>
 

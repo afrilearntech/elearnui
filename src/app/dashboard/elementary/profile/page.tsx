@@ -242,11 +242,7 @@ export default function ElementaryProfilePage() {
     setIsMobileMenuOpen(false);
   };
 
-  if (isLoading) {
-    return <StudentLoadingScreen title="Loading your profile..." subtitle="Preparing your account details." />;
-  }
-
-  if (!user) {
+  if (!isLoading && !user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -278,6 +274,12 @@ export default function ElementaryProfilePage() {
         />
         
         <main id="main-content" role="main" className="flex-1 bg-linear-to-br from-[#DBEAFE] via-[#F0FDF4] to-[#CFFAFE] sm:pl-[280px] lg:pl-[320px] overflow-x-hidden">
+          {isLoading ? (
+            <StudentLoadingScreen
+              title="Loading your profile..."
+              subtitle="Preparing your account details."
+            />
+          ) : (
           <div className="p-4 lg:p-8 max-w-full">
             {/* Page Header */}
             <div className="bg-white/60 rounded-2xl shadow-lg p-6 sm:p-8 mt-8 sm:mx-8 mx-4 mb-6">
@@ -568,6 +570,7 @@ export default function ElementaryProfilePage() {
               </div>
             </div>
           </div>
+          )}
         </main>
       </div>
     </div>

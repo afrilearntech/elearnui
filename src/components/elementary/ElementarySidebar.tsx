@@ -72,6 +72,14 @@ export default function ElementarySidebar({ activeItem = 'home', isMobileMenuOpe
       hoverColor: 'hover:opacity-90'
     },
     {
+      id: 'peer-review',
+      title: 'Peer Review',
+      icon: '🧠',
+      href: '/peer-review',
+      bgColor: 'bg-[#F3F4F6]',
+      hoverColor: 'hover:opacity-90'
+    },
+    {
       id: 'avatar',
       title: 'Avatar Room',
       icon: '👤',
@@ -201,6 +209,13 @@ export default function ElementarySidebar({ activeItem = 'home', isMobileMenuOpe
                       />
                     </div>
                     <span className="text-[18px] font-semibold text-[#4338CA]">{item.title}</span>
+                  </div>
+                ) : item.id === 'peer-review' ? (
+                  <div className="flex items-center">
+                    <div className="w-10 h-10 bg-[#A78BFA] rounded-full flex items-center justify-center mr-4">
+                      <span className="text-xl">🧠</span>
+                    </div>
+                    <span className="text-[18px] font-semibold text-[#5B21B6]">{item.title}</span>
                   </div>
                 ) : item.id === 'avatar' ? (
                   <div className="flex items-center">
@@ -358,6 +373,13 @@ export default function ElementarySidebar({ activeItem = 'home', isMobileMenuOpe
                       />
                     </div>
                     <span className="text-xs text-center leading-tight text-[#4338CA]">{item.title}</span>
+                  </div>
+                ) : item.id === 'peer-review' ? (
+                  <div className="flex flex-col items-center">
+                    <div className="w-10 h-10 bg-[#A78BFA] rounded-full flex items-center justify-center mb-2">
+                      <span className="text-xl">🧠</span>
+                    </div>
+                    <span className="text-xs text-center leading-tight text-[#5B21B6]">{item.title}</span>
                   </div>
                 ) : item.id === 'avatar' ? (
                   <div className="flex flex-col items-center">

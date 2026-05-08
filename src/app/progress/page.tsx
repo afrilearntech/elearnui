@@ -336,15 +336,6 @@ export default function ProgressPage() {
     );
   };
 
-  if (isLoading) {
-    return (
-      <StudentLoadingScreen
-        title="Growing your progress garden..."
-        subtitle="Fetching your plants, streaks, and learning milestones."
-      />
-    );
-  }
-
   const totalLessons = progressData?.lessons_completed || 0;
   const longestStreak = progressData?.longest_streak || 0;
   const currentLevel = progressData?.level || 'Beginner';
@@ -365,6 +356,12 @@ export default function ProgressPage() {
         />
         
         <main id="main-content" role="main" className="flex-1 sm:pl-[280px] lg:pl-[320px] overflow-x-hidden">
+          {isLoading ? (
+            <StudentLoadingScreen
+              title="Growing your progress garden..."
+              subtitle="Fetching your plants, streaks, and learning milestones."
+            />
+          ) : (
           <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
             <div className="mb-6">
               <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-2 bg-linear-to-r from-green-600 via-blue-600 to-purple-600 bg-clip-text text-transparent" style={{ fontFamily: 'Andika, sans-serif' }}>
@@ -587,6 +584,7 @@ export default function ProgressPage() {
               </div>
             </div>
           </div>
+          )}
         </main>
       </div>
     </div>

@@ -370,11 +370,7 @@ export default function AssignmentDetailPage() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isEnabled, shuffledQuestions, currentQuestionIndex, answers, announce, playSound, handleSubmitAssessment]);
 
-  if (isLoading) {
-    return <StudentLoadingScreen title="Loading assignment details..." subtitle="Preparing questions and resources for you." />;
-  }
-
-  if (!assessment) {
+  if (!isLoading && !assessment) {
     return null;
   }
 
@@ -390,6 +386,12 @@ export default function AssignmentDetailPage() {
         />
         
         <main id="main-content" role="main" className="flex-1 bg-linear-to-br from-[#DBEAFE] via-[#F0FDF4] to-[#CFFAFE] sm:pl-[280px] lg:pl-[320px] overflow-x-hidden">
+          {isLoading ? (
+            <StudentLoadingScreen
+              title="Loading assignment details..."
+              subtitle="Preparing questions and resources for you."
+            />
+          ) : (
           <div className="p-4 lg:p-8 max-w-full">
             {/* Header */}
             <div className="sm:mx-8 mx-4 mb-6">
@@ -408,14 +410,14 @@ export default function AssignmentDetailPage() {
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                   <div className="flex-1">
                     <h1 className="text-2xl sm:text-3xl font-bold text-[#9333EA] mb-4" style={{ fontFamily: 'Andika, sans-serif' }}>
-                      {assessmentData?.assessment.title || assessment.title}
+                      {assessmentData?.assessment.title || assessment?.title || 'Assessment'}
                     </h1>
                     <div className="flex flex-wrap items-center gap-3">
                       <span className="px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-700 capitalize" style={{ fontFamily: 'Andika, sans-serif' }}>
-                        {assessment.type}
+                        {assessment?.type || 'Assessment'}
                       </span>
                       <span className="px-3 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700" style={{ fontFamily: 'Andika, sans-serif' }}>
-                        {assessment.marks} marks
+                        {assessment?.marks ?? 0} marks
                       </span>
                     </div>
                   </div>
@@ -696,6 +698,7 @@ export default function AssignmentDetailPage() {
               </div>
             )}
           </div>
+          )}
         </main>
       </div>
     </div>

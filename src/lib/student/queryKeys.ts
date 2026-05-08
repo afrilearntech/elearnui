@@ -7,6 +7,8 @@ export const studentQueryKeys = {
   userProfile: ["student", "user-profile"] as const,
   lessonDetail: (lessonId: string) => ["student", "lesson", lessonId] as const,
   kidsAssessments: ["student", "kids-assessments"] as const,
+  kidsPeerSolutions: (scope: "general" | "lesson", assessmentId: number) =>
+    ["student", "kids-peer-solutions", scope, assessmentId] as const,
   kidsStories: ["student", "kids-stories"] as const,
   kidsStoryDetail: (storyId: number) => ["student", "kids-story-detail", storyId] as const,
   assignmentDetail: (assignmentId: string) => ["student", "assignment", assignmentId] as const,

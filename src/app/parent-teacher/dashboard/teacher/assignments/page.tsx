@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/parent-teacher/layout/DashboardLayout";
 import { Icon } from "@iconify/react";
 import {
@@ -8,7 +9,6 @@ import {
   getHeadTeacherLessonAssessments,
   getHeadTeacherGeneralAssessments,
   getHeadTeacherAssessmentStatistics,
-  getTeacherAssessmentStatistics,
   TeacherLessonAssessment,
   GeneralAssessment,
   AssessmentStatisticsResponse,
@@ -61,11 +61,12 @@ type UnifiedAssessment = {
   grade?: string;
   ai_recommended?: boolean;
   is_targeted?: boolean;
-  target_student?: number | null;
+  target_student?: number | string | null;
   scope: AssessmentTab;
 };
 
 export default function AssignmentsPage() {
+  const router = useRouter();
   const [isHeadTeacher, setIsHeadTeacher] = useState(false);
   const [activeTab, setActiveTab] = useState<AssessmentTab>("lesson");
   const [lessonAssessments, setLessonAssessments] = useState<UnifiedAssessment[]>([]);
@@ -312,9 +313,7 @@ export default function AssignmentsPage() {
         assessment.scope === "general"
           ? { general_assessment_id: assessment.id }
           : { lesson_assessment_id: assessment.id };
-      const response = isHeadTeacher
-        ? await getHeadTeacherAssessmentStatistics(payload)
-        : await getTeacherAssessmentStatistics(payload);
+      const response = await getHeadTeacherAssessmentStatistics(payload);
       setStatsData(response);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (error) {
@@ -644,7 +643,16 @@ export default function AssignmentsPage() {
                       <tr key={assessment.id} className="hover:bg-gray-50 transition-colors">
                         <td className="py-4 px-4">
                           <div>
-                            <p className="font-semibold text-gray-900">{assessment.title}</p>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-semibold text-gray-900">{assessment.title}</p>
+                              {assessment.scope === "general" && assessment.is_targeted ? (
+                                <span className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-0.5 text-[11px] font-semibold text-indigo-700">
+                                  <Icon icon="solar:target-bold" className="h-3.5 w-3.5" />
+                                  Targeted
+                                  {assessment.target_student ? ` • ID ${assessment.target_student}` : ""}
+                                </span>
+                              ) : null}
+                            </div>
                             {assessment.instructions && (
                               <p className="text-xs text-gray-500 line-clamp-1 mt-0.5">
                                 {assessment.instructions}
@@ -712,7 +720,14 @@ export default function AssignmentsPage() {
                               </button>
                               {assessment.status.toUpperCase() === "APPROVED" ? (
                                 <button
-                                  onClick={() => void handleOpenStatistics(assessment)}
+                                  onClick={() => {
+                                    const params = new URLSearchParams({
+                                      scope: assessment.scope,
+                                      id: String(assessment.id),
+                                      title: assessment.title,
+                                    });
+                                    router.push(`/parent-teacher/dashboard/teacher/assignments/statistics?${params.toString()}`);
+                                  }}
                                   className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 transition-colors hover:bg-indigo-100"
                                 >
                                   <Icon icon="solar:chart-square-bold" className="h-4 w-4" />

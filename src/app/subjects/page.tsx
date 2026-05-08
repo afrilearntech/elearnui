@@ -359,10 +359,6 @@ export default function SubjectsLessonsPage() {
     delay: 700,
   });
 
-  if (isLoading) {
-    return <StudentLoadingScreen title="Loading subjects..." subtitle="Bringing your subjects and lessons into view." />;
-  }
-
   return (
     <div className="min-h-screen">
       <ElementaryNavbar onMenuToggle={handleMenuToggle} />
@@ -371,6 +367,12 @@ export default function SubjectsLessonsPage() {
         <ElementarySidebar activeItem="subjects" isMobileMenuOpen={isMobileMenuOpen} onMobileMenuClose={handleMenuClose} />
 
         <main id="main-content" role="main" className="flex-1 bg-linear-to-br from-[#DBEAFE] via-[#F0FDF4] to-[#CFFAFE] sm:pl-[280px] lg:pl-[320px]">
+          {isLoading ? (
+            <StudentLoadingScreen
+              title="Loading subjects..."
+              subtitle="Bringing your subjects and lessons into view."
+            />
+          ) : (
           <div className="p-4 lg:p-8">
             {/* Title Section */}
             <div className="sm:ml-8 sm:mr-8 mb-6">
@@ -667,6 +669,7 @@ export default function SubjectsLessonsPage() {
               )}
             </div>
           </div>
+          )}
         </main>
       </div>
     </div>

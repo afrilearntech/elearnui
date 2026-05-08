@@ -2,7 +2,16 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { Icon } from "@iconify/react";
-import { createLessonAssessment, getTeacherLessons, TeacherLesson } from "@/lib/api/parent-teacher/teacher";
+import {
+  createLessonAssessment,
+  generateAiAssessmentsForStudent,
+  getTeacherLessons,
+  getTeacherStudents,
+  getTeacherSubjects,
+  TeacherLesson,
+  TeacherStudent,
+  TeacherSubject,
+} from "@/lib/api/parent-teacher/teacher";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
 
 interface CreateAssignmentModalProps {
@@ -15,7 +24,16 @@ export default function CreateAssignmentModal({ isOpen, onClose, onSuccess }: Cr
   const [lessons, setLessons] = useState<TeacherLesson[]>([]);
   const [isLoadingLessons, setIsLoadingLessons] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGeneratingAi, setIsGeneratingAi] = useState(false);
   const [isLessonPickerOpen, setIsLessonPickerOpen] = useState(false);
+  const [isAiStudentPickerOpen, setIsAiStudentPickerOpen] = useState(false);
+  const [students, setStudents] = useState<TeacherStudent[]>([]);
+  const [subjects, setSubjects] = useState<TeacherSubject[]>([]);
+  const [isLoadingStudents, setIsLoadingStudents] = useState(false);
+  const [studentSearch, setStudentSearch] = useState("");
+  const [studentGradeFilter, setStudentGradeFilter] = useState("All");
+  const [studentSubjectFilter, setStudentSubjectFilter] = useState("All");
+  const [selectedStudentId, setSelectedStudentId] = useState<number | null>(null);
   const [lessonSearch, setLessonSearch] = useState("");
   const [lessonGradeFilter, setLessonGradeFilter] = useState("All");
   const [lessonSubjectFilter, setLessonSubjectFilter] = useState("All");
@@ -144,7 +162,104 @@ export default function CreateAssignmentModal({ isOpen, onClose, onSuccess }: Cr
     setLessonSearch("");
     setLessonGradeFilter("All");
     setLessonSubjectFilter("All");
+    setStudentSearch("");
+    setStudentGradeFilter("All");
+    setStudentSubjectFilter("All");
+    setSelectedStudentId(null);
   };
+
+  const readTeacherUserId = () => {
+    if (typeof window === "undefined") return null;
+    const userStr = localStorage.getItem("user");
+    if (!userStr) return null;
+    try {
+      const user = JSON.parse(userStr) as { id?: number | string };
+      const id = Number(user.id);
+      return Number.isFinite(id) ? id : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const fetchStudentsForAi = async () => {
+    try {
+      setIsLoadingStudents(true);
+      const [studentRows, subjectRows] = await Promise.all([getTeacherStudents(), getTeacherSubjects()]);
+      setStudents(studentRows);
+      setSubjects(subjectRows);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to load students for AI generation.";
+      showErrorToast(message);
+    } finally {
+      setIsLoadingStudents(false);
+    }
+  };
+
+  const handleGenerateAiAssessment = async () => {
+    const teacherId = readTeacherUserId();
+    if (!teacherId) {
+      showErrorToast("Could not identify teacher account. Please sign in again.");
+      return;
+    }
+
+    if (!selectedStudentId) {
+      showErrorToast("Select a student first.");
+      return;
+    }
+
+    setIsGeneratingAi(true);
+    try {
+      const result = await generateAiAssessmentsForStudent(teacherId, selectedStudentId);
+      const total =
+        (result.general_assessments?.length ?? 0) + (result.lesson_assessments?.length ?? 0);
+      if (total === 0) {
+        showSuccessToast("No new AI assessments were generated.");
+      } else {
+        showSuccessToast(`Generated ${total} AI assessment${total === 1 ? "" : "s"} successfully.`);
+      }
+      onSuccess();
+      setSelectedStudentId(null);
+      setIsAiStudentPickerOpen(false);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to generate AI assessments.";
+      showErrorToast(message);
+    } finally {
+      setIsGeneratingAi(false);
+    }
+  };
+
+  const subjectOptions = useMemo(() => {
+    const unique = Array.from(new Set(subjects.map((subject) => subject.name).filter(Boolean)));
+    return ["All", ...unique];
+  }, [subjects]);
+
+  const studentGradeOptions = useMemo(() => {
+    const unique = Array.from(new Set(students.map((student) => student.grade).filter(Boolean)));
+    return ["All", ...unique];
+  }, [students]);
+
+  const filteredStudentsForAi = useMemo(() => {
+    const needle = studentSearch.trim().toLowerCase();
+    const subjectGrades = new Set(
+      subjects
+        .filter((subject) => studentSubjectFilter === "All" || subject.name === studentSubjectFilter)
+        .map((subject) => subject.grade),
+    );
+
+    return students.filter((student) => {
+      if (student.status !== "APPROVED") return false;
+      const matchesSearch =
+        !needle ||
+        student.profile.name.toLowerCase().includes(needle) ||
+        student.profile.email.toLowerCase().includes(needle) ||
+        (student.student_id || "").toLowerCase().includes(needle);
+      const matchesGrade = studentGradeFilter === "All" || student.grade === studentGradeFilter;
+      const matchesSubject =
+        studentSubjectFilter === "All" ||
+        (subjectGrades.size > 0 && subjectGrades.has(student.grade));
+      return matchesSearch && matchesGrade && matchesSubject;
+    });
+  }, [students, subjects, studentSearch, studentGradeFilter, studentSubjectFilter]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -289,6 +404,20 @@ export default function CreateAssignmentModal({ isOpen, onClose, onSuccess }: Cr
           </div>
 
           <div className="sticky bottom-0 bg-white border-t border-gray-200 pt-6 -mb-6 -mx-6 px-6 flex gap-3 justify-end">
+            <div className="mr-auto">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAiStudentPickerOpen(true);
+                  void fetchStudentsForAi();
+                }}
+                disabled={isGeneratingAi || isSubmitting}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Icon icon="solar:magic-stick-3-bold" className="h-4 w-4" />
+                Generate AI Assessment
+              </button>
+            </div>
             <button
               type="button"
               onClick={onClose}
@@ -383,6 +512,123 @@ export default function CreateAssignmentModal({ isOpen, onClose, onSuccess }: Cr
                   );
                 })
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isAiStudentPickerOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-4xl rounded-2xl bg-white shadow-2xl border border-gray-200 max-h-[88vh] overflow-hidden">
+            <div className="border-b border-gray-200 px-5 py-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Select Student for AI Assessment</h3>
+                  <p className="text-sm text-gray-500">Search and filter students by class (grade) and subject.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsAiStudentPickerOpen(false)}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  <Icon icon="solar:close-circle-bold" className="w-6 h-6" />
+                </button>
+              </div>
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+                <input
+                  type="text"
+                  value={studentSearch}
+                  onChange={(e) => setStudentSearch(e.target.value)}
+                  placeholder="Search by name, email, or student ID..."
+                  className="h-10 rounded-lg border border-gray-300 px-3 text-sm text-gray-700 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500"
+                />
+                <select
+                  value={studentGradeFilter}
+                  onChange={(e) => setStudentGradeFilter(e.target.value)}
+                  className="h-10 rounded-lg border border-gray-300 px-3 text-sm text-gray-700 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500"
+                >
+                  {studentGradeOptions.map((grade) => (
+                    <option key={grade} value={grade}>
+                      {grade === "All" ? "All Classes (Grades)" : grade}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={studentSubjectFilter}
+                  onChange={(e) => setStudentSubjectFilter(e.target.value)}
+                  className="h-10 rounded-lg border border-gray-300 px-3 text-sm text-gray-700 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500"
+                >
+                  {subjectOptions.map((subject) => (
+                    <option key={subject} value={subject}>
+                      {subject === "All" ? "All Subjects" : subject}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="max-h-[55vh] overflow-y-auto divide-y divide-gray-100">
+              {isLoadingStudents ? (
+                <div className="p-8 text-center text-sm text-gray-500">Loading students...</div>
+              ) : filteredStudentsForAi.length === 0 ? (
+                <div className="p-8 text-center text-sm text-gray-500">
+                  No approved students match your filters.
+                </div>
+              ) : (
+                filteredStudentsForAi.map((student) => {
+                  const isActive = selectedStudentId === student.id;
+                  return (
+                    <button
+                      key={student.id}
+                      type="button"
+                      onClick={() => setSelectedStudentId(student.id)}
+                      className={`w-full text-left px-5 py-4 transition-colors ${
+                        isActive ? "bg-indigo-50" : "hover:bg-gray-50"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="font-semibold text-gray-900 truncate">{student.profile.name}</p>
+                          <p className="text-xs text-gray-600 mt-1">{student.profile.email}</p>
+                          <p className="text-xs text-gray-500 mt-2">
+                            {student.grade} • ID: {student.student_id || student.id}
+                          </p>
+                        </div>
+                        {isActive ? (
+                          <Icon icon="solar:check-circle-bold" className="w-5 h-5 text-indigo-600 shrink-0" />
+                        ) : null}
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+            <div className="border-t border-gray-200 p-4 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setIsAiStudentPickerOpen(false)}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                disabled={isGeneratingAi}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleGenerateAiAssessment()}
+                disabled={!selectedStudentId || isGeneratingAi}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isGeneratingAi ? (
+                  <>
+                    <Icon icon="solar:loading-bold" className="h-4 w-4 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <Icon icon="solar:magic-stick-3-bold" className="h-4 w-4" />
+                    Generate AI Assessment
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>

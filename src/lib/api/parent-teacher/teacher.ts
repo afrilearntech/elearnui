@@ -103,7 +103,7 @@ export interface GeneralAssessment {
   grade: string;
   ai_recommended?: boolean;
   is_targeted?: boolean;
-  target_student?: number | null;
+  target_student?: number | string | null;
   status: string;
   moderation_comment: string;
   created_at: string;
@@ -118,6 +118,9 @@ export interface CreateGeneralAssessmentRequest {
   marks: number;
   due_at: string;
   grade: string;
+  ai_recommended?: boolean;
+  is_targeted?: boolean;
+  target_student?: number | string | null;
   status: string;
   moderation_comment?: string;
 }
@@ -971,7 +974,7 @@ export interface GeneratedGeneralAssessment {
   grade: string;
   ai_recommended: boolean;
   is_targeted: boolean;
-  target_student: number | null;
+  target_student: number | string | null;
   status: string;
   moderation_comment: string;
   created_at: string;
@@ -990,7 +993,7 @@ export interface GeneratedLessonAssessment {
   due_at: string;
   ai_recommended: boolean;
   is_targeted: boolean;
-  target_student: number | null;
+  target_student: number | string | null;
   status: string;
   moderation_comment: string;
   created_at: string;
@@ -1142,7 +1145,7 @@ export interface TeacherLessonAssessment {
   due_at: string;
   ai_recommended?: boolean;
   is_targeted?: boolean;
-  target_student?: number | null;
+  target_student?: number | string | null;
   status: string;
   moderation_comment: string;
   created_at: string;

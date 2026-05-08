@@ -667,10 +667,6 @@ export default function GamesPage() {
     ? Math.round((slots.filter(Boolean).length / answerKey.length) * 100)
     : 0;
 
-  if (isLoading) {
-    return <StudentLoadingScreen title="Loading games..." subtitle="Getting your fun challenges ready." />;
-  }
-
   return (
     <div className="min-h-screen">
       <ElementaryNavbar onMenuToggle={handleMenuToggle} />
@@ -678,6 +674,9 @@ export default function GamesPage() {
         <ElementarySidebar activeItem="games" isMobileMenuOpen={isMobileMenuOpen} onMobileMenuClose={handleMenuClose} />
 
         <main id="main-content" role="main" className="flex-1 bg-linear-to-br from-[#DBEAFE] via-[#F0FDF4] to-[#CFFAFE] sm:pl-[280px] lg:pl-[320px]">
+          {isLoading ? (
+            <StudentLoadingScreen title="Loading games..." subtitle="Getting your fun challenges ready." />
+          ) : (
           <div className="p-4 lg:p-8">
             {/* Heading */}
             <div className="bg-white/60 rounded-xl shadow-md px-4 sm:px-6 py-4 sm:py-5 sm:ml-8 sm:mr-8" style={{ fontFamily: 'Andika, sans-serif' }}>
@@ -1060,6 +1059,7 @@ export default function GamesPage() {
                 )}
               </div>
           </div>
+          )}
         </main>
       </div>
       {showDescriptionModal && (

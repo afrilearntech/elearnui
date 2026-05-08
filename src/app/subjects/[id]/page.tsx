@@ -348,17 +348,19 @@ export default function SubjectLessonDetail() {
     if (el) handleSequentialSeeked(el, audioFurthestWatchedRef, audioLastKnownTimeRef);
   };
 
-  if (isLoading) {
-    return <StudentLoadingScreen title="Loading lesson..." subtitle="Preparing your lesson content and activities." />;
-  }
-
-  if (!lesson) {
+  if (!isLoading && !lesson) {
     return (
       <div className="min-h-screen">
         <ElementaryNavbar onMenuToggle={handleMenuToggle} />
         <div className="flex">
           <ElementarySidebar activeItem="subjects" isMobileMenuOpen={isMobileMenuOpen} onMobileMenuClose={handleMenuClose} />
-          <main id="main-content" role="main" className="flex-1 bg-linear-to-br from-[#DBEAFE] via-[#F0FDF4] to-[#CFFAFE] sm:pl-[280px] lg:pl-[320px]">
+        <main id="main-content" role="main" className="flex-1 bg-linear-to-br from-[#DBEAFE] via-[#F0FDF4] to-[#CFFAFE] sm:pl-[280px] lg:pl-[320px]">
+          {isLoading ? (
+            <StudentLoadingScreen
+              title="Loading lesson..."
+              subtitle="Preparing your lesson content and activities."
+            />
+          ) : (
             <div className="p-6 lg:p-10">
               <div className="max-w-xl mx-auto bg-white rounded-2xl border border-red-100 shadow-sm p-8 text-center">
                 <div className="mx-auto mb-4 w-14 h-14 rounded-full bg-red-50 flex items-center justify-center">
@@ -380,6 +382,7 @@ export default function SubjectLessonDetail() {
                 </Link>
               </div>
             </div>
+          )}
           </main>
         </div>
       </div>
@@ -444,7 +447,7 @@ export default function SubjectLessonDetail() {
                     <div className="h-[13px] rounded-full bg-linear-to-r from-[#10B981] to-[#3B82F6]" style={{ width: '100%' }}></div>
                   </div>
                   <div className="text-[12px] text-[#4B5563] mt-1 text-center" style={{ fontFamily: 'Andika, sans-serif' }}>
-                    Lesson Duration: {lesson.duration_minutes} minutes
+                    Lesson Duration: {lesson?.duration_minutes ?? 0} minutes
                   </div>
                 </div>
               )}
@@ -604,7 +607,7 @@ export default function SubjectLessonDetail() {
                               draggable={false}
                               autoPlay
                               preload="metadata"
-                              aria-label={`Video player for ${lesson.title}`}
+                              aria-label={`Video player for ${lesson?.title || 'this lesson'}`}
                               onTimeUpdate={onVideoTimeUpdate}
                               onSeeked={onVideoSeeked}
                               onDragStart={(e) => e.preventDefault()}
@@ -639,7 +642,7 @@ export default function SubjectLessonDetail() {
                             draggable={false}
                             autoPlay
                             preload="metadata"
-                            aria-label={`Audio player for ${lesson.title}`}
+                            aria-label={`Audio player for ${lesson?.title || 'this lesson'}`}
                             onTimeUpdate={onAudioTimeUpdate}
                             onSeeked={onAudioSeeked}
                             onDragStart={(e) => e.preventDefault()}

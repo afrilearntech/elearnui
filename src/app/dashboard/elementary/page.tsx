@@ -100,11 +100,7 @@ export default function ElementaryDashboard() {
     setIsMobileMenuOpen(false);
   };
 
-  if (isLoading) {
-    return <StudentLoadingScreen title="Loading your magical dashboard..." subtitle="Getting your lessons, stars, and adventures ready." />;
-  }
-
-  if (!dashboardData) {
+  if (!isLoading && !dashboardData) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-2 p-6">
         <p className="text-gray-800 font-semibold" style={{ fontFamily: 'Andika, sans-serif' }}>
@@ -136,6 +132,12 @@ export default function ElementaryDashboard() {
         />
         
         <main id="main-content" role="main" className="flex-1 bg-linear-to-br from-[#DBEAFE] via-[#F0FDF4] to-[#CFFAFE] sm:pl-[280px] lg:pl-[320px] overflow-x-hidden">
+          {isLoading ? (
+            <StudentLoadingScreen
+              title="Loading your magical dashboard..."
+              subtitle="Getting your lessons, stars, and adventures ready."
+            />
+          ) : (
           <div className="p-4 lg:p-8 max-w-full">
             {/* Welcome Banner */}
             <div className="relative bg-white/60 rounded-2xl shadow-lg h-[140px] mt-8 sm:mx-8 mx-4 w-full max-w-full overflow-hidden" role="region" aria-label={`Welcome section. Welcome back, ${safeName}. Ready for another magical learning adventure.`}>
@@ -273,6 +275,7 @@ export default function ElementaryDashboard() {
               />
             </div>
           </div>
+          )}
         </main>
       </div>
     </div>

@@ -201,15 +201,6 @@ export default function FunzonePage() {
     );
   };
 
-  if (isLoading) {
-    return (
-      <StudentLoadingScreen
-        title="Loading your grade room..."
-        subtitle="Bringing your lesson and assignment results."
-      />
-    );
-  }
-
   const calculateAverage = (grades: (LessonGrade | GeneralGrade)[]): number => {
     if (grades.length === 0) return 0;
     const total = grades.reduce((sum, grade) => sum + calculatePercentage(grade.score, grade.marks), 0);
@@ -232,6 +223,12 @@ export default function FunzonePage() {
         />
         
         <main id="main-content" role="main" className="flex-1 bg-linear-to-br from-[#DBEAFE] via-[#F0FDF4] to-[#CFFAFE] sm:pl-[280px] lg:pl-[320px] overflow-x-hidden">
+          {isLoading ? (
+            <StudentLoadingScreen
+              title="Loading your grade room..."
+              subtitle="Bringing your lesson and assignment results."
+            />
+          ) : (
           <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
             <div className="mb-6">
               <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-2 bg-linear-to-r from-blue-600 via-green-600 to-cyan-600 bg-clip-text text-transparent" style={{ fontFamily: 'Andika, sans-serif' }}>
@@ -399,6 +396,7 @@ export default function FunzonePage() {
               </div>
             </div>
           </div>
+          )}
         </main>
       </div>
     </div>

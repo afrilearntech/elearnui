@@ -283,3 +283,44 @@ export async function getKidsAssessments(token: string): Promise<KidsAssessments
   });
 }
 
+export interface KidsPeerSolutionAssessment {
+  id: number;
+  title: string;
+  type: string;
+}
+
+export interface KidsPeerSolutionItem {
+  peer_label: string;
+  solution: string;
+  attachment: string | null;
+  submitted_at: string;
+}
+
+export interface KidsPeerSolutionsResponse {
+  assessment: KidsPeerSolutionAssessment;
+  solutions: KidsPeerSolutionItem[];
+}
+
+export async function getKidsPeerSolutions(
+  token: string,
+  params: { general_id?: number; lesson_id?: number },
+): Promise<KidsPeerSolutionsResponse> {
+  const hasGeneral = typeof params.general_id === 'number';
+  const hasLesson = typeof params.lesson_id === 'number';
+
+  if ((hasGeneral && hasLesson) || (!hasGeneral && !hasLesson)) {
+    throw new Error('Provide exactly one of general_id or lesson_id.');
+  }
+
+  const query = new URLSearchParams();
+  if (hasGeneral) query.set('general_id', String(params.general_id));
+  if (hasLesson) query.set('lesson_id', String(params.lesson_id));
+
+  return apiRequest<KidsPeerSolutionsResponse>(`/kids/peer-solutions/?${query.toString()}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Token ${token}`,
+    },
+  });
+}
+

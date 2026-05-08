@@ -31,7 +31,7 @@ interface AssessmentCard extends KidsAssessment {
   due_at: string;
   status: string;
   instructions: string;
-  category: 'lesson' | 'general' | 'form' | 'assignment' | 'ai';
+  category: 'lesson' | 'general' | 'ai';
   isPlayable: boolean;
 }
 
@@ -100,15 +100,10 @@ const getStatusConfig = (assessment: KidsAssessment, isLocked: boolean = false) 
 
 const resolveAssessmentCategory = (
   assessment: KidsAssessment,
-): 'lesson' | 'general' | 'form' | 'assignment' | 'ai' => {
+): 'lesson' | 'general' | 'ai' => {
   const type = String(assessment.type || '').toLowerCase();
-  const isAi = Boolean(assessment.ai_recommended || assessment.is_targeted);
+  const isAi = Boolean(assessment.is_targeted);
   if (isAi) return 'ai';
-
-  if (type.includes('assignment')) return 'assignment';
-
-  const isFormType = type.includes('form') || Boolean(assessment.is_form_assessment);
-  if (isFormType) return 'form';
 
   if (type.includes('lesson') || Boolean(assessment.lesson_id)) return 'lesson';
   return 'general';
@@ -161,9 +156,7 @@ export default function MyAssignmentsPage() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const hasAnnouncedPageRef = useRef(false);
   const [filter, setFilter] = useState<'all' | 'pending' | 'due_soon' | 'overdue' | 'submitted'>('all');
-  const [assessmentTab, setAssessmentTab] = useState<
-    'all' | 'lesson' | 'general' | 'form' | 'assignment' | 'ai'
-  >('all');
+  const [assessmentTab, setAssessmentTab] = useState<'lesson' | 'general' | 'ai'>('lesson');
 
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: studentQueryKeys.kidsAssessments,
@@ -283,22 +276,9 @@ export default function MyAssignmentsPage() {
     ? assessments.filter((assessment) => assessment.isSubmitted)
     : assessments.filter((assessment) => !assessment.isSubmitted && assessment.displayStatus === filter);
 
-  const hasAssignmentAssessments = assessments.some((assessment) => assessment.category === 'assignment');
-
-  const tabFilteredAssessments =
-    assessmentTab === 'all'
-      ? filteredAssessments
-      : filteredAssessments.filter((assessment) => assessment.category === assessmentTab);
-
-  useEffect(() => {
-    if (assessmentTab === 'assignment' && !hasAssignmentAssessments) {
-      setAssessmentTab('all');
-    }
-  }, [assessmentTab, hasAssignmentAssessments]);
-
-  if (isLoading) {
-    return <StudentLoadingScreen title="Loading assessments..." subtitle="Fetching your latest tasks and due dates." />;
-  }
+  const tabFilteredAssessments = filteredAssessments.filter(
+    (assessment) => assessment.category === assessmentTab,
+  );
 
   return (
     <div className="min-h-screen">
@@ -312,6 +292,12 @@ export default function MyAssignmentsPage() {
         />
 
         <main id="main-content" role="main" className="flex-1 bg-linear-to-br from-[#DBEAFE] via-[#F0FDF4] to-[#CFFAFE] sm:pl-[280px] lg:pl-[320px] overflow-x-hidden">
+          {isLoading ? (
+            <StudentLoadingScreen
+              title="Loading assessments..."
+              subtitle="Fetching your latest tasks and due dates."
+            />
+          ) : (
           <div className="p-4 lg:p-8 max-w-full">
             {/* Title Section */}
             <div className="sm:mx-8 mx-4 mb-6">
@@ -371,13 +357,8 @@ export default function MyAssignmentsPage() {
             <div className="sm:mx-8 mx-4 mb-4">
               <div className="inline-flex max-w-full flex-wrap items-center gap-2 rounded-2xl border border-white/70 bg-white/70 p-2 shadow-sm">
                 {[
-                  { key: 'all', label: 'All Types', icon: 'mdi:view-grid-outline' },
                   { key: 'lesson', label: 'Lesson', icon: 'mdi:book-open-variant' },
                   { key: 'general', label: 'General', icon: 'mdi:clipboard-text-outline' },
-                  ...(hasAssignmentAssessments
-                    ? [{ key: 'assignment', label: 'Assignments', icon: 'mdi:clipboard-edit-outline' }]
-                    : []),
-                  { key: 'form', label: 'Form', icon: 'mdi:form-select' },
                   { key: 'ai', label: 'Personalized', icon: 'mdi:robot-happy-outline' },
                 ].map((tab) => {
                   const active = assessmentTab === tab.key;
@@ -387,7 +368,7 @@ export default function MyAssignmentsPage() {
                       type="button"
                       onClick={() =>
                         setAssessmentTab(
-                          tab.key as 'all' | 'lesson' | 'general' | 'form' | 'assignment' | 'ai',
+                          tab.key as 'lesson' | 'general' | 'ai',
                         )
                       }
                       className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs sm:text-sm font-semibold transition ${
@@ -616,16 +597,14 @@ export default function MyAssignmentsPage() {
                   <div className="bg-white rounded-xl shadow-md p-6 sm:p-8 max-w-md mx-auto">
                     <Icon icon="mdi:clipboard-check-outline" width={48} height={48} className="sm:w-16 sm:h-16 mx-auto text-gray-300 mb-4" />
                     <p className="text-base sm:text-lg font-semibold text-gray-700 mb-2 px-4" style={{ fontFamily: 'Andika, sans-serif' }}>
-                      {filter === 'all' && assessmentTab === 'all'
+                      {filter === 'all'
                         ? 'No Assessments Yet! 🎉'
                         : `No ${
-                            assessmentTab === 'all'
-                              ? filter === 'due_soon'
-                                ? 'due soon'
-                                : filter === 'submitted'
-                                ? 'submitted'
-                                : filter.replace('_', ' ')
-                              : assessmentTab
+                            filter === 'due_soon'
+                              ? 'due soon'
+                              : filter === 'submitted'
+                              ? 'submitted'
+                              : filter.replace('_', ' ')
                           } assessments`}
                     </p>
                     <p className="text-xs sm:text-sm text-gray-500 px-4" style={{ fontFamily: 'Andika, sans-serif' }}>
@@ -640,6 +619,7 @@ export default function MyAssignmentsPage() {
               )}
             </div>
           </div>
+          )}
         </main>
       </div>
     </div>
