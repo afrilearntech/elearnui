@@ -9,7 +9,8 @@ import {
   TeacherStudent,
   approveStudent,
   rejectStudent,
-  generateAiAssessmentsForStudent,
+  generateAiAssessments,
+  type AssessmentAiTargetScope,
 } from "@/lib/api/parent-teacher/teacher";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
 import { ApiClientError } from "@/lib/api/client";
@@ -134,7 +135,10 @@ export default function MyClassPage() {
     }
   };
 
-  const handleGenerateAiAssessment = async (student: TeacherStudent) => {
+  const handleGenerateAiAssessment = async (
+    student: TeacherStudent,
+    targetScope: AssessmentAiTargetScope
+  ) => {
     const teacherId = readTeacherUserId();
     if (!teacherId) {
       showErrorToast("Could not identify teacher account. Please sign in again.");
@@ -147,15 +151,24 @@ export default function MyClassPage() {
 
     setIsGeneratingForStudentId(student.id);
     try {
-      const result = await generateAiAssessmentsForStudent(teacherId, student.id);
+      const result = await generateAiAssessments(teacherId, {
+        student_id: student.id,
+        target_scope: targetScope,
+      });
       const generalCount = result.general_assessments?.length ?? 0;
       const lessonCount = result.lesson_assessments?.length ?? 0;
       const total = generalCount + lessonCount;
       if (total === 0) {
-        showSuccessToast("No new assessments were generated for this student.");
+        showSuccessToast(
+          targetScope === "class"
+            ? "No new assessments were generated for this class."
+            : "No new assessments were generated for this student."
+        );
       } else {
         showSuccessToast(
-          `Generated ${total} AI assessment${total === 1 ? "" : "s"} for ${student.profile.name}.`
+          targetScope === "class"
+            ? `Generated ${total} AI assessment${total === 1 ? "" : "s"} for ${student.profile.name}'s class (${student.grade}).`
+            : `Generated ${total} AI assessment${total === 1 ? "" : "s"} for ${student.profile.name}.`
         );
       }
     } catch (error) {
@@ -355,9 +368,31 @@ export default function MyClassPage() {
                       </div>
                     )}
                     {student.status === "APPROVED" && (
-                      <div className="mt-4 pt-4 border-t border-gray-200" onClick={(e) => e.stopPropagation()}>
+                      <div
+                        className="mt-4 pt-4 border-t border-gray-200 space-y-2"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <button
-                          onClick={() => void handleGenerateAiAssessment(student)}
+                          type="button"
+                          onClick={() => void handleGenerateAiAssessment(student, "student")}
+                          disabled={isGeneratingForStudentId === student.id}
+                          className="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-800 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {isGeneratingForStudentId === student.id ? (
+                            <>
+                              <Icon icon="solar:loading-bold" className="w-4 h-4 animate-spin" />
+                              Generating...
+                            </>
+                          ) : (
+                            <>
+                              <Icon icon="solar:user-bold" className="w-4 h-4" />
+                              AI: this student
+                            </>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleGenerateAiAssessment(student, "class")}
                           disabled={isGeneratingForStudentId === student.id}
                           className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
                         >
@@ -368,8 +403,8 @@ export default function MyClassPage() {
                             </>
                           ) : (
                             <>
-                              <Icon icon="solar:magic-stick-3-bold" className="w-4 h-4" />
-                              Generate AI Assessment
+                              <Icon icon="solar:users-group-two-rounded-bold" className="w-4 h-4" />
+                              AI: full class
                             </>
                           )}
                         </button>
@@ -669,25 +704,46 @@ export default function MyClassPage() {
               )}
             </div>
 
-            <div className="sticky bottom-0 bg-white border-t border-gray-200 p-6 flex gap-3 justify-end">
+            <div className="sticky bottom-0 bg-white border-t border-gray-200 p-6 flex flex-wrap gap-3 justify-end">
               {selectedStudent.status === "APPROVED" && (
-                <button
-                  onClick={() => void handleGenerateAiAssessment(selectedStudent)}
-                  disabled={isGeneratingForStudentId === selectedStudent.id}
-                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isGeneratingForStudentId === selectedStudent.id ? (
-                    <>
-                      <Icon icon="solar:loading-bold" className="w-4 h-4 animate-spin" />
-                      Generating...
-                    </>
-                  ) : (
-                    <>
-                      <Icon icon="solar:magic-stick-3-bold" className="w-4 h-4" />
-                      Generate AI Assessment
-                    </>
-                  )}
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => void handleGenerateAiAssessment(selectedStudent, "student")}
+                    disabled={isGeneratingForStudentId === selectedStudent.id}
+                    className="px-4 py-2 text-sm font-medium text-indigo-800 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isGeneratingForStudentId === selectedStudent.id ? (
+                      <>
+                        <Icon icon="solar:loading-bold" className="w-4 h-4 animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Icon icon="solar:user-bold" className="w-4 h-4" />
+                        AI: this student
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleGenerateAiAssessment(selectedStudent, "class")}
+                    disabled={isGeneratingForStudentId === selectedStudent.id}
+                    className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isGeneratingForStudentId === selectedStudent.id ? (
+                      <>
+                        <Icon icon="solar:loading-bold" className="w-4 h-4 animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Icon icon="solar:users-group-two-rounded-bold" className="w-4 h-4" />
+                        AI: full class
+                      </>
+                    )}
+                  </button>
+                </>
               )}
               {selectedStudent.status !== "APPROVED" && (
                 <>

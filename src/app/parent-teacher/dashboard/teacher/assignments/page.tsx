@@ -7,15 +7,16 @@ import { Icon } from "@iconify/react";
 import {
   getTeacherLessonAssessments,
   getHeadTeacherLessonAssessments,
-  getHeadTeacherGeneralAssessments,
   getHeadTeacherAssessmentStatistics,
   TeacherLessonAssessment,
-  GeneralAssessment,
   AssessmentStatisticsResponse,
 } from "@/lib/api/parent-teacher/teacher";
 import { showErrorToast } from "@/lib/toast";
 import CreateAssignmentModal from "@/components/parent-teacher/teacher/CreateAssignmentModal";
 import AddQuestionsModal from "@/components/parent-teacher/teacher/AddQuestionsModal";
+import EditTeacherAssessmentModal from "@/components/parent-teacher/teacher/EditTeacherAssessmentModal";
+import EditAssessmentQuestionsModal from "@/components/parent-teacher/teacher/EditAssessmentQuestionsModal";
+import AssessmentTableActionsMenu from "@/components/parent-teacher/teacher/AssessmentTableActionsMenu";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 const getStatusColor = (status: string) => {
@@ -44,7 +45,6 @@ const formatDate = (dateString: string) => {
   });
 };
 
-type AssessmentTab = "lesson" | "general";
 type SortDirection = "asc" | "desc";
 type SortKey = "title" | "lesson_or_grade" | "type" | "marks" | "due_at" | "status" | "created_at";
 
@@ -62,15 +62,14 @@ type UnifiedAssessment = {
   ai_recommended?: boolean;
   is_targeted?: boolean;
   target_student?: number | string | null;
-  scope: AssessmentTab;
+  /** Lesson assessments only on this page (general assessments live under Teacher → Assessments). */
+  scope: "lesson";
 };
 
 export default function AssignmentsPage() {
   const router = useRouter();
   const [isHeadTeacher, setIsHeadTeacher] = useState(false);
-  const [activeTab, setActiveTab] = useState<AssessmentTab>("lesson");
   const [lessonAssessments, setLessonAssessments] = useState<UnifiedAssessment[]>([]);
-  const [generalAssessments, setGeneralAssessments] = useState<UnifiedAssessment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [selectedType, setSelectedType] = useState<string>("All");
@@ -79,6 +78,11 @@ export default function AssignmentsPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isQuestionsModalOpen, setIsQuestionsModalOpen] = useState(false);
   const [selectedAssessment, setSelectedAssessment] = useState<UnifiedAssessment | null>(null);
+  const [editAssessment, setEditAssessment] = useState<UnifiedAssessment | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [openActionsRowKey, setOpenActionsRowKey] = useState<string | null>(null);
+  const [isEditQuestionsModalOpen, setIsEditQuestionsModalOpen] = useState(false);
+  const [editQuestionsAssessment, setEditQuestionsAssessment] = useState<UnifiedAssessment | null>(null);
   const [selectedStatsAssessment, setSelectedStatsAssessment] = useState<UnifiedAssessment | null>(null);
   const [statsData, setStatsData] = useState<AssessmentStatisticsResponse | null>(null);
   const [isStatsLoading, setIsStatsLoading] = useState(false);
@@ -106,23 +110,6 @@ export default function AssignmentsPage() {
       scope: "lesson",
     }));
 
-  const mapGeneralAssessments = (rows: GeneralAssessment[]): UnifiedAssessment[] =>
-    rows.map((item) => ({
-      id: item.id,
-      title: item.title,
-      type: item.type,
-      marks: item.marks,
-      due_at: item.due_at,
-      status: item.status,
-      created_at: item.created_at,
-      instructions: item.instructions,
-      grade: item.grade,
-      ai_recommended: item.ai_recommended,
-      is_targeted: item.is_targeted,
-      target_student: item.target_student,
-      scope: "general",
-    }));
-
   useEffect(() => {
     const fetchAssessments = async () => {
       try {
@@ -140,16 +127,11 @@ export default function AssignmentsPage() {
         setIsHeadTeacher(headTeacher);
 
         if (headTeacher) {
-          const [lessonData, generalData] = await Promise.all([
-            getHeadTeacherLessonAssessments(),
-            getHeadTeacherGeneralAssessments(),
-          ]);
+          const lessonData = await getHeadTeacherLessonAssessments();
           setLessonAssessments(mapLessonAssessments(lessonData));
-          setGeneralAssessments(mapGeneralAssessments(generalData));
         } else {
-          const data = await getTeacherLessonAssessments();
-          setLessonAssessments(mapLessonAssessments(data));
-          setGeneralAssessments([]);
+          const lessonData = await getTeacherLessonAssessments();
+          setLessonAssessments(mapLessonAssessments(lessonData));
         }
       } catch (error) {
         console.error("Error fetching assignments:", error);
@@ -162,11 +144,8 @@ export default function AssignmentsPage() {
     fetchAssessments();
   }, []);
 
-  const currentAssessments =
-    activeTab === "lesson" ? lessonAssessments : generalAssessments;
-
   const filteredAssessments = useMemo(() => {
-    return currentAssessments.filter((assessment) => {
+    return lessonAssessments.filter((assessment) => {
       const matchesSearch =
         search.trim().length === 0 ||
         assessment.title.toLowerCase().includes(search.toLowerCase()) ||
@@ -185,7 +164,7 @@ export default function AssignmentsPage() {
 
       return matchesSearch && matchesStatus && matchesType && matchesGrade;
     });
-  }, [currentAssessments, search, selectedStatus, selectedType, selectedGrade]);
+  }, [lessonAssessments, search, selectedStatus, selectedType, selectedGrade]);
 
   const sortedAssessments = useMemo(() => {
     const statusRank: Record<string, number> = {
@@ -203,14 +182,9 @@ export default function AssignmentsPage() {
         case "title":
           comparison = a.title.localeCompare(b.title, undefined, { sensitivity: "base" });
           break;
-        case "lesson_or_grade": {
-          if (activeTab === "lesson") {
-            comparison = (a.lesson ?? 0) - (b.lesson ?? 0);
-          } else {
-            comparison = (a.grade ?? "").localeCompare(b.grade ?? "", undefined, { sensitivity: "base" });
-          }
+        case "lesson_or_grade":
+          comparison = (a.lesson ?? 0) - (b.lesson ?? 0);
           break;
-        }
         case "type":
           comparison = a.type.localeCompare(b.type, undefined, { sensitivity: "base" });
           break;
@@ -231,7 +205,7 @@ export default function AssignmentsPage() {
       return sortDirection === "asc" ? comparison : -comparison;
     });
     return list;
-  }, [filteredAssessments, sortKey, sortDirection, activeTab]);
+  }, [filteredAssessments, sortKey, sortDirection]);
 
   const totalPages = Math.max(1, Math.ceil(sortedAssessments.length / pageSize));
   const currentPage = Math.min(page, totalPages);
@@ -241,13 +215,13 @@ export default function AssignmentsPage() {
   const statuses = ["All", "DRAFT", "PUBLISHED", "PENDING", "APPROVED", "REJECTED"];
   const types = [
     "All",
-    ...Array.from(new Set(currentAssessments.map((item) => item.type?.toUpperCase()))),
+    ...Array.from(new Set(lessonAssessments.map((item) => item.type?.toUpperCase()))),
   ];
   const grades = [
     "All",
     ...Array.from(
       new Set(
-        currentAssessments
+        lessonAssessments
           .map((item) => item.grade)
           .filter((grade): grade is string => Boolean(grade))
       )
@@ -261,15 +235,11 @@ export default function AssignmentsPage() {
   const handleCreateSuccess = async () => {
     try {
       if (isHeadTeacher) {
-        const [lessonData, generalData] = await Promise.all([
-          getHeadTeacherLessonAssessments(),
-          getHeadTeacherGeneralAssessments(),
-        ]);
+        const lessonData = await getHeadTeacherLessonAssessments();
         setLessonAssessments(mapLessonAssessments(lessonData));
-        setGeneralAssessments(mapGeneralAssessments(generalData));
       } else {
-        const data = await getTeacherLessonAssessments();
-        setLessonAssessments(mapLessonAssessments(data));
+        const lessonData = await getTeacherLessonAssessments();
+        setLessonAssessments(mapLessonAssessments(lessonData));
       }
     } catch (error) {
       console.error("Error refreshing assignments:", error);
@@ -309,10 +279,7 @@ export default function AssignmentsPage() {
     setStatsData(null);
 
     try {
-      const payload =
-        assessment.scope === "general"
-          ? { general_assessment_id: assessment.id }
-          : { lesson_assessment_id: assessment.id };
+      const payload = { lesson_assessment_id: assessment.id };
       const response = await getHeadTeacherAssessmentStatistics(payload);
       setStatsData(response);
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -356,7 +323,7 @@ export default function AssignmentsPage() {
                 <p className="text-xs font-semibold tracking-wide text-indigo-600 uppercase">Assessment Statistics</p>
                 <h2 className="mt-1 text-xl font-bold text-gray-900">{selectedStatsAssessment.title}</h2>
                 <p className="mt-1 text-sm text-gray-600">
-                  {selectedStatsAssessment.scope === "general" ? "General assessment" : "Lesson assessment"}{" "}
+                  Lesson assessment{" "}
                   #{selectedStatsAssessment.id}
                 </p>
               </div>
@@ -445,11 +412,11 @@ export default function AssignmentsPage() {
 
         <div className="flex items-center justify-between flex-col sm:flex-row gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Assessments</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Lesson assessments</h1>
             <p className="text-gray-600 mt-1">
               {isHeadTeacher
-                ? "Track lesson and general assessments across your school"
-                : "Manage and view all lesson assessments with statistics"}
+                ? "Track lesson assessments across your school"
+                : "Manage lesson assessments, add questions, and view statistics. General assessments are under Assessments."}
             </p>
           </div>
           {!isHeadTeacher && (
@@ -464,39 +431,6 @@ export default function AssignmentsPage() {
         </div>
 
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
-          {isHeadTeacher && (
-            <div className="mb-5">
-              <div className="inline-flex rounded-xl bg-gray-100 p-1">
-                <button
-                  onClick={() => {
-                    setActiveTab("lesson");
-                    setPage(1);
-                  }}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    activeTab === "lesson"
-                      ? "bg-white text-indigo-700 shadow-sm"
-                      : "text-gray-600 hover:text-gray-800"
-                  }`}
-                >
-                  Lesson Assessments ({lessonAssessments.length})
-                </button>
-                <button
-                  onClick={() => {
-                    setActiveTab("general");
-                    setPage(1);
-                  }}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    activeTab === "general"
-                      ? "bg-white text-indigo-700 shadow-sm"
-                      : "text-gray-600 hover:text-gray-800"
-                  }`}
-                >
-                  General Assessments ({generalAssessments.length})
-                </button>
-              </div>
-            </div>
-          )}
-
           {/* Filters */}
           <div className="flex flex-col lg:flex-row gap-4 mb-6">
             <div className="flex-1 min-w-0">
@@ -585,7 +519,7 @@ export default function AssignmentsPage() {
                           onClick={() => handleSort("lesson_or_grade")}
                           className="inline-flex items-center gap-1 hover:text-gray-900"
                         >
-                          {activeTab === "lesson" ? "Lesson ID" : "Grade"} {renderSortIcon("lesson_or_grade")}
+                          Lesson ID {renderSortIcon("lesson_or_grade")}
                         </button>
                       </th>
                       <th className="text-left py-3 px-4 text-xs font-semibold text-gray-600 uppercase">
@@ -645,7 +579,7 @@ export default function AssignmentsPage() {
                           <div>
                             <div className="flex flex-wrap items-center gap-2">
                               <p className="font-semibold text-gray-900">{assessment.title}</p>
-                              {assessment.scope === "general" && assessment.is_targeted ? (
+                              {assessment.is_targeted ? (
                                 <span className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-0.5 text-[11px] font-semibold text-indigo-700">
                                   <Icon icon="solar:target-bold" className="h-3.5 w-3.5" />
                                   Targeted
@@ -662,9 +596,7 @@ export default function AssignmentsPage() {
                         </td>
                         <td className="py-4 px-4">
                           <span className="text-sm text-gray-700">
-                            {activeTab === "lesson"
-                              ? `#${assessment.lesson || "-"}`
-                              : assessment.grade || "N/A"}
+                            #{assessment.lesson || "-"}
                           </span>
                         </td>
                         <td className="py-4 px-4">
@@ -692,49 +624,85 @@ export default function AssignmentsPage() {
                         </td>
                         <td className="py-4 px-4">
                           {isHeadTeacher ? (
-                            assessment.status.toUpperCase() === "APPROVED" ? (
-                              <button
-                                onClick={() => void handleOpenStatistics(assessment)}
-                                className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 transition-colors hover:bg-indigo-100"
-                              >
-                                <Icon icon="solar:chart-square-bold" className="h-4 w-4" />
-                                Statistics
-                              </button>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-500">
-                                <Icon icon="solar:lock-keyhole-minimalistic-bold" className="h-4 w-4" />
-                                Await Approval
-                              </span>
-                            )
+                            <AssessmentTableActionsMenu
+                              rowKey={`${assessment.scope}-${assessment.id}`}
+                              openRowKey={openActionsRowKey}
+                              onOpenChange={setOpenActionsRowKey}
+                              items={
+                                assessment.status.toUpperCase() === "APPROVED"
+                                  ? [
+                                      {
+                                        id: "statistics",
+                                        label: "Statistics",
+                                        icon: "solar:chart-square-bold",
+                                        onClick: () => void handleOpenStatistics(assessment),
+                                      },
+                                    ]
+                                  : [
+                                      {
+                                        id: "await",
+                                        label: "Awaiting approval",
+                                        icon: "solar:lock-keyhole-minimalistic-bold",
+                                        onClick: () => {},
+                                        disabled: true,
+                                      },
+                                    ]
+                              }
+                            />
                           ) : (
-                            <div className="flex flex-wrap items-center gap-2">
-                              <button
-                                onClick={() => {
-                                  setSelectedAssessment(assessment);
-                                  setIsQuestionsModalOpen(true);
-                                }}
-                                className="inline-flex items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-100"
-                              >
-                                <Icon icon="solar:question-circle-bold" className="w-4 h-4" />
-                                <span>Add Questions</span>
-                              </button>
-                              {assessment.status.toUpperCase() === "APPROVED" ? (
-                                <button
-                                  onClick={() => {
-                                    const params = new URLSearchParams({
-                                      scope: assessment.scope,
-                                      id: String(assessment.id),
-                                      title: assessment.title,
-                                    });
-                                    router.push(`/parent-teacher/dashboard/teacher/assignments/statistics?${params.toString()}`);
-                                  }}
-                                  className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 transition-colors hover:bg-indigo-100"
-                                >
-                                  <Icon icon="solar:chart-square-bold" className="h-4 w-4" />
-                                  Statistics
-                                </button>
-                              ) : null}
-                            </div>
+                            <AssessmentTableActionsMenu
+                              rowKey={`${assessment.scope}-${assessment.id}`}
+                              openRowKey={openActionsRowKey}
+                              onOpenChange={setOpenActionsRowKey}
+                              items={[
+                                {
+                                  id: "edit",
+                                  label: "Edit assessment",
+                                  icon: "solar:pen-new-square-bold",
+                                  onClick: () => {
+                                    setEditAssessment(assessment);
+                                    setIsEditModalOpen(true);
+                                  },
+                                },
+                                {
+                                  id: "add-questions",
+                                  label: "Add questions",
+                                  icon: "solar:add-circle-bold",
+                                  onClick: () => {
+                                    setSelectedAssessment(assessment);
+                                    setIsQuestionsModalOpen(true);
+                                  },
+                                },
+                                {
+                                  id: "edit-questions",
+                                  label: "Edit questions",
+                                  icon: "solar:clipboard-list-bold",
+                                  onClick: () => {
+                                    setEditQuestionsAssessment(assessment);
+                                    setIsEditQuestionsModalOpen(true);
+                                  },
+                                },
+                                ...(assessment.status.toUpperCase() === "APPROVED"
+                                  ? [
+                                      {
+                                        id: "statistics",
+                                        label: "Statistics",
+                                        icon: "solar:chart-square-bold" as const,
+                                        onClick: () => {
+                                          const params = new URLSearchParams({
+                                            scope: assessment.scope,
+                                            id: String(assessment.id),
+                                            title: assessment.title,
+                                          });
+                                          router.push(
+                                            `/parent-teacher/dashboard/teacher/assignments/statistics?${params.toString()}`
+                                          );
+                                        },
+                                      },
+                                    ]
+                                  : []),
+                              ]}
+                            />
                           )}
                         </td>
                       </tr>
@@ -828,6 +796,41 @@ export default function AssignmentsPage() {
           assessmentTitle={selectedAssessment.title}
         />
       )}
+      {editQuestionsAssessment ? (
+        <EditAssessmentQuestionsModal
+          isOpen={isEditQuestionsModalOpen}
+          onClose={() => {
+            setIsEditQuestionsModalOpen(false);
+            setEditQuestionsAssessment(null);
+          }}
+          assessmentId={editQuestionsAssessment.id}
+          assessmentType={editQuestionsAssessment.scope}
+          assessmentTitle={editQuestionsAssessment.title}
+        />
+      ) : null}
+      <EditTeacherAssessmentModal
+        isOpen={isEditModalOpen}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setEditAssessment(null);
+        }}
+        onSuccess={handleCreateSuccess}
+        assessment={
+          editAssessment
+            ? {
+                id: editAssessment.id,
+                scope: editAssessment.scope,
+                title: editAssessment.title,
+                type: editAssessment.type,
+                instructions: editAssessment.instructions ?? "",
+                marks: editAssessment.marks,
+                due_at: editAssessment.due_at,
+                grade: editAssessment.grade,
+                lesson: editAssessment.lesson,
+              }
+            : null
+        }
+      />
     </DashboardLayout>
   );
 }

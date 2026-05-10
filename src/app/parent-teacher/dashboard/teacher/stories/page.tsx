@@ -2,7 +2,7 @@
 
 import { Icon } from "@iconify/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { PortalLoadingOverlay } from "@/components/parent-teacher/PortalDataSkeleton";
 import DashboardLayout from "@/components/parent-teacher/layout/DashboardLayout";
@@ -12,8 +12,12 @@ import {
   getTeacherStoryDetail,
   getTeacherStories,
   getTeacherSubjects,
+  updateTeacherStory,
+  type TeacherStoryCharacter,
   type TeacherStoryDetail,
   type TeacherStoryListItem,
+  type TeacherStoryVocabulary,
+  type UpdateTeacherStoryRequest,
 } from "@/lib/api/parent-teacher/teacher";
 import { ptQueryKeys } from "@/lib/parent-teacher/queryKeys";
 import { showErrorToast, showSuccessToast } from "@/lib/toast";
@@ -48,17 +52,264 @@ function formatDateTime(value: string) {
   });
 }
 
+type StoryEditDraft = {
+  title: string;
+  grade: string;
+  tag: string;
+  estimated_minutes: number;
+  cover_prompt: string;
+  cover_image_url: string;
+  cover_alt: string;
+  moral: string;
+  body: string;
+  characters: TeacherStoryCharacter[];
+  vocabulary: TeacherStoryVocabulary[];
+};
+
+function storyToDraft(story: TeacherStoryDetail): StoryEditDraft {
+  return {
+    title: story.title,
+    grade: story.grade,
+    tag: story.tag,
+    estimated_minutes: Math.min(32767, Math.max(0, story.estimated_minutes)),
+    cover_prompt: story.cover_image?.prompt ?? "",
+    cover_image_url: story.cover_image?.image_url ?? "",
+    cover_alt: story.cover_image?.alt_text ?? "",
+    moral: story.moral,
+    body: story.body,
+    characters:
+      story.characters.length > 0 ? story.characters.map((c) => ({ ...c })) : [{ name: "", description: "", role: "" }],
+    vocabulary:
+      story.vocabulary.length > 0
+        ? story.vocabulary.map((v) => ({ ...v }))
+        : [{ word: "", definition: "" }],
+  };
+}
+
+const inputClass =
+  "w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/30";
+
+const COVER_IMAGE_MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
+const COVER_IMAGE_CANVAS_MAX_WIDTH = 1920;
+const COVER_IMAGE_JPEG_QUALITY = 0.82;
+
+/** Resizes and JPEG-encodes locally so PATCH can send `image_url` without a separate upload API. */
+function compressImageFileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      try {
+        let width = img.naturalWidth;
+        let height = img.naturalHeight;
+        if (!width || !height) {
+          reject(new Error("Invalid image dimensions."));
+          return;
+        }
+        if (width > COVER_IMAGE_CANVAS_MAX_WIDTH) {
+          height = Math.round((height * COVER_IMAGE_CANVAS_MAX_WIDTH) / width);
+          width = COVER_IMAGE_CANVAS_MAX_WIDTH;
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          reject(new Error("Could not process image."));
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", COVER_IMAGE_JPEG_QUALITY));
+      } catch {
+        reject(new Error("Could not process image."));
+      }
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("Could not load image."));
+    };
+    img.src = objectUrl;
+  });
+}
+
 function StoryDetailsModal({
   story,
   isLoading,
   isOpen,
   onClose,
+  gradeOptions,
 }: {
   story: TeacherStoryDetail | null;
   isLoading: boolean;
   isOpen: boolean;
   onClose: () => void;
+  gradeOptions: string[];
 }) {
+  const queryClient = useQueryClient();
+  const coverFileInputRef = useRef<HTMLInputElement>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [draft, setDraft] = useState<StoryEditDraft | null>(null);
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [coverPreviewUrl, setCoverPreviewUrl] = useState<string | null>(null);
+  const [showCoverUrlFallback, setShowCoverUrlFallback] = useState(false);
+  const [isCompressingCover, setIsCompressingCover] = useState(false);
+
+  const replaceCoverPreview = useCallback((nextUrl: string) => {
+    setCoverPreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return nextUrl;
+    });
+  }, []);
+
+  const resetCoverFileUi = useCallback(() => {
+    setCoverFile(null);
+    setCoverPreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+    setShowCoverUrlFallback(false);
+    if (coverFileInputRef.current) coverFileInputRef.current.value = "";
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setIsEditing(false);
+      setDraft(null);
+      resetCoverFileUi();
+    }
+  }, [isOpen, resetCoverFileUi]);
+
+  useEffect(() => {
+    setIsEditing(false);
+    setDraft(null);
+    resetCoverFileUi();
+  }, [story?.id, resetCoverFileUi]);
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: number; payload: UpdateTeacherStoryRequest }) =>
+      updateTeacherStory(id, payload),
+    onSuccess: (_, variables) => {
+      showSuccessToast("Story saved.");
+      queryClient.invalidateQueries({ queryKey: ptQueryKeys.teacherStoryDetail(variables.id) });
+      queryClient.invalidateQueries({ queryKey: ptQueryKeys.teacherStories });
+      setIsEditing(false);
+      setDraft(null);
+      resetCoverFileUi();
+    },
+    onError: (error) => {
+      if (error instanceof ApiClientError) {
+        showErrorToast(error.message || "Failed to update story.");
+      } else {
+        showErrorToast("Failed to update story.");
+      }
+    },
+  });
+
+  const gradeSelectOptions = useMemo(() => {
+    const set = new Set<string>(gradeOptions);
+    if (story?.grade) set.add(story.grade);
+    if (draft?.grade) set.add(draft.grade);
+    return Array.from(set).sort();
+  }, [gradeOptions, story?.grade, draft?.grade]);
+
+  const tagSelectOptions = useMemo(() => {
+    const set = new Set<string>([...STORY_TAG_CHOICES]);
+    if (story?.tag) set.add(story.tag);
+    if (draft?.tag) set.add(draft.tag);
+    return Array.from(set).sort();
+  }, [story?.tag, draft?.tag]);
+
+  function enterEdit() {
+    if (!story) return;
+    resetCoverFileUi();
+    setDraft(storyToDraft(story));
+    setIsEditing(true);
+  }
+
+  function cancelEdit() {
+    setIsEditing(false);
+    setDraft(null);
+    resetCoverFileUi();
+  }
+
+  function handleCoverFileChosen(files: FileList | null) {
+    const file = files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      showErrorToast("Please choose an image file (JPEG, PNG, WebP, or GIF).");
+      return;
+    }
+    if (file.size > COVER_IMAGE_MAX_UPLOAD_BYTES) {
+      showErrorToast("Image must be 15 MB or smaller.");
+      return;
+    }
+    replaceCoverPreview(URL.createObjectURL(file));
+    setCoverFile(file);
+    setShowCoverUrlFallback(false);
+  }
+
+  function clearChosenCoverFile() {
+    setCoverFile(null);
+    setCoverPreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+    if (coverFileInputRef.current) coverFileInputRef.current.value = "";
+  }
+
+  async function saveEdit() {
+    if (!story || !draft) return;
+    const title = draft.title.trim();
+    if (!title) {
+      showErrorToast("Title is required.");
+      return;
+    }
+    if (!draft.grade.trim()) {
+      showErrorToast("Grade is required.");
+      return;
+    }
+    let imageUrl = draft.cover_image_url.trim();
+    if (coverFile) {
+      setIsCompressingCover(true);
+      try {
+        imageUrl = await compressImageFileToDataUrl(coverFile);
+      } catch {
+        showErrorToast("Could not read that image. Try another file.");
+        return;
+      } finally {
+        setIsCompressingCover(false);
+      }
+    }
+    const payload = {
+      title,
+      grade: draft.grade.trim(),
+      tag: draft.tag.trim(),
+      estimated_minutes: Math.min(32767, Math.max(0, Number(draft.estimated_minutes) || 0)),
+      cover_image: {
+        prompt: draft.cover_prompt.trim(),
+        image_url: imageUrl,
+        alt_text: draft.cover_alt.trim(),
+      },
+      characters: draft.characters
+        .filter((c) => c.name.trim())
+        .map((c) => ({
+          name: c.name.trim(),
+          description: c.description.trim(),
+          role: c.role.trim(),
+        })),
+      vocabulary: draft.vocabulary
+        .filter((v) => v.word.trim())
+        .map((v) => ({
+          word: v.word.trim(),
+          definition: v.definition.trim(),
+        })),
+      moral: draft.moral.trim(),
+      body: draft.body,
+    };
+    updateMutation.mutate({ id: story.id, payload });
+  }
+
   if (!isOpen) return null;
 
   return (
@@ -67,22 +318,69 @@ function StoryDetailsModal({
       onClick={onClose}
       role="dialog"
       aria-modal="true"
-      aria-label="Story details"
+      aria-label={isEditing ? "Edit story" : "Story details"}
     >
       <div
-        className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl border border-gray-200 bg-white shadow-xl"
+        className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl border border-gray-200 bg-white shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-200 bg-white px-5 py-4">
-          <h2 className="text-xl font-bold text-gray-900">Story details</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100"
-            aria-label="Close story details"
-          >
-            <Icon icon="solar:close-circle-bold" className="h-6 w-6" />
-          </button>
+        <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-white px-5 py-4">
+          <h2 className="text-xl font-bold text-gray-900">{isEditing ? "Edit story" : "Story details"}</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            {!isLoading && story && !isEditing ? (
+              <button
+                type="button"
+                onClick={enterEdit}
+                className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"
+              >
+                <Icon icon="solar:pen-bold" className="h-4 w-4" />
+                Edit
+              </button>
+            ) : null}
+            {isEditing ? (
+              <>
+                <button
+                  type="button"
+                  onClick={cancelEdit}
+                  disabled={updateMutation.isPending || isCompressingCover}
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void saveEdit()}
+                  disabled={updateMutation.isPending || !draft || isCompressingCover}
+                  className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {updateMutation.isPending ? (
+                    <>
+                      <Icon icon="solar:loading-bold" className="h-4 w-4 animate-spin" />
+                      Saving…
+                    </>
+                  ) : isCompressingCover ? (
+                    <>
+                      <Icon icon="solar:loading-bold" className="h-4 w-4 animate-spin" />
+                      Preparing image…
+                    </>
+                  ) : (
+                    <>
+                      <Icon icon="solar:diskette-bold" className="h-4 w-4" />
+                      Save changes
+                    </>
+                  )}
+                </button>
+              </>
+            ) : null}
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100"
+              aria-label="Close story details"
+            >
+              <Icon icon="solar:close-circle-bold" className="h-6 w-6" />
+            </button>
+          </div>
         </div>
 
         {isLoading ? (
@@ -91,6 +389,340 @@ function StoryDetailsModal({
           </div>
         ) : !story ? (
           <div className="p-8 text-center text-sm text-gray-600">Unable to load story details.</div>
+        ) : isEditing && draft ? (
+          <div className="space-y-6 p-6">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="space-y-1 sm:col-span-2">
+                <span className="text-sm font-medium text-gray-700">Title</span>
+                <input
+                  type="text"
+                  value={draft.title}
+                  onChange={(e) => setDraft((d) => (d ? { ...d, title: e.target.value } : d))}
+                  className={inputClass}
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="text-sm font-medium text-gray-700">Grade</span>
+                <select
+                  value={draft.grade}
+                  onChange={(e) => setDraft((d) => (d ? { ...d, grade: e.target.value } : d))}
+                  className={inputClass}
+                >
+                  {gradeSelectOptions.length === 0 ? (
+                    <option value="">Select grade</option>
+                  ) : (
+                    gradeSelectOptions.map((g) => (
+                      <option key={g} value={g}>
+                        {g}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </label>
+              <label className="space-y-1">
+                <span className="text-sm font-medium text-gray-700">Tag</span>
+                <select
+                  value={draft.tag}
+                  onChange={(e) => setDraft((d) => (d ? { ...d, tag: e.target.value } : d))}
+                  className={inputClass}
+                >
+                  {tagSelectOptions.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="space-y-1 sm:col-span-2">
+                <span className="text-sm font-medium text-gray-700">Estimated minutes (max 32767)</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={32767}
+                  value={draft.estimated_minutes}
+                  onChange={(e) =>
+                    setDraft((d) =>
+                      d ? { ...d, estimated_minutes: Math.min(32767, Math.max(0, Number(e.target.value) || 0)) } : d
+                    )
+                  }
+                  className={inputClass}
+                />
+              </label>
+            </div>
+
+            <div className="rounded-xl border border-gray-200 p-4">
+              <h4 className="text-sm font-semibold text-gray-900">Cover image</h4>
+              <p className="mt-1 text-xs text-gray-500">
+                Choose JPEG, PNG, WebP, or GIF from your device. Large images are resized automatically before saving.
+              </p>
+              <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start">
+                <div className="relative shrink-0 overflow-hidden rounded-xl border border-gray-200 bg-gray-50 sm:w-56">
+                  {coverPreviewUrl || draft.cover_image_url.trim() ? (
+                    <img
+                      src={coverPreviewUrl || draft.cover_image_url}
+                      alt={draft.cover_alt || "Cover preview"}
+                      className="h-44 w-full object-cover sm:h-40 sm:w-56"
+                    />
+                  ) : (
+                    <div className="flex h-44 items-center justify-center px-4 text-center text-sm text-gray-500 sm:h-40">
+                      No cover image
+                    </div>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1 space-y-3">
+                  <input
+                    ref={coverFileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    className="sr-only"
+                    aria-label="Choose cover image file"
+                    onChange={(e) => {
+                      handleCoverFileChosen(e.target.files);
+                      e.target.value = "";
+                    }}
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => coverFileInputRef.current?.click()}
+                      className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"
+                    >
+                      <Icon icon="solar:gallery-add-bold" className="h-4 w-4" />
+                      Choose image file
+                    </button>
+                    {coverFile ? (
+                      <button
+                        type="button"
+                        onClick={clearChosenCoverFile}
+                        className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                      >
+                        Discard new image
+                      </button>
+                    ) : null}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowCoverUrlFallback((open) => !open)}
+                    className="text-xs font-medium text-emerald-700 hover:text-emerald-900"
+                  >
+                    {showCoverUrlFallback ? "Hide hosted URL option" : "Use a hosted image URL instead"}
+                  </button>
+                  {showCoverUrlFallback ? (
+                    <label className="block space-y-1">
+                      <span className="text-xs font-medium text-gray-600">Image URL</span>
+                      <input
+                        type="url"
+                        value={draft.cover_image_url}
+                        onChange={(e) => {
+                          setCoverFile(null);
+                          setCoverPreviewUrl((prev) => {
+                            if (prev) URL.revokeObjectURL(prev);
+                            return null;
+                          });
+                          setDraft((d) => (d ? { ...d, cover_image_url: e.target.value } : d));
+                        }}
+                        className={inputClass}
+                        placeholder="https://..."
+                      />
+                    </label>
+                  ) : null}
+                </div>
+              </div>
+              <div className="mt-4 grid gap-3 border-t border-gray-100 pt-4 sm:grid-cols-2">
+                <label className="space-y-1 sm:col-span-2">
+                  <span className="text-xs font-medium text-gray-600">Prompt</span>
+                  <input
+                    type="text"
+                    value={draft.cover_prompt}
+                    onChange={(e) => setDraft((d) => (d ? { ...d, cover_prompt: e.target.value } : d))}
+                    className={inputClass}
+                  />
+                </label>
+                <label className="space-y-1 sm:col-span-2">
+                  <span className="text-xs font-medium text-gray-600">Alt text</span>
+                  <input
+                    type="text"
+                    value={draft.cover_alt}
+                    onChange={(e) => setDraft((d) => (d ? { ...d, cover_alt: e.target.value } : d))}
+                    className={inputClass}
+                  />
+                </label>
+              </div>
+            </div>
+
+            <label className="block space-y-1">
+              <span className="text-sm font-medium text-gray-700">Moral</span>
+              <textarea
+                value={draft.moral}
+                onChange={(e) => setDraft((d) => (d ? { ...d, moral: e.target.value } : d))}
+                rows={2}
+                className={inputClass}
+              />
+            </label>
+
+            <div className="rounded-xl border border-gray-200 p-4">
+              <div className="flex items-center justify-between gap-2">
+                <h4 className="text-sm font-semibold text-gray-900">Characters</h4>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setDraft((d) =>
+                      d ? { ...d, characters: [...d.characters, { name: "", description: "", role: "" }] } : d
+                    )
+                  }
+                  className="text-xs font-semibold text-emerald-700 hover:text-emerald-800"
+                >
+                  + Add character
+                </button>
+              </div>
+              <ul className="mt-3 space-y-3">
+                {draft.characters.map((character, index) => (
+                  <li key={`char-${index}`} className="rounded-lg border border-gray-100 bg-gray-50/80 p-3">
+                    <div className="mb-2 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setDraft((d) =>
+                            d
+                              ? {
+                                  ...d,
+                                  characters: d.characters.filter((_, i) => i !== index),
+                                }
+                              : d
+                          )
+                        }
+                        className="text-xs font-medium text-red-600 hover:text-red-700"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      <input
+                        placeholder="Name"
+                        value={character.name}
+                        onChange={(e) =>
+                          setDraft((d) => {
+                            if (!d) return d;
+                            const next = [...d.characters];
+                            next[index] = { ...next[index], name: e.target.value };
+                            return { ...d, characters: next };
+                          })
+                        }
+                        className={inputClass}
+                      />
+                      <input
+                        placeholder="Role"
+                        value={character.role}
+                        onChange={(e) =>
+                          setDraft((d) => {
+                            if (!d) return d;
+                            const next = [...d.characters];
+                            next[index] = { ...next[index], role: e.target.value };
+                            return { ...d, characters: next };
+                          })
+                        }
+                        className={inputClass}
+                      />
+                      <input
+                        placeholder="Description"
+                        className={`sm:col-span-3 ${inputClass}`}
+                        value={character.description}
+                        onChange={(e) =>
+                          setDraft((d) => {
+                            if (!d) return d;
+                            const next = [...d.characters];
+                            next[index] = { ...next[index], description: e.target.value };
+                            return { ...d, characters: next };
+                          })
+                        }
+                      />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="rounded-xl border border-gray-200 p-4">
+              <div className="flex items-center justify-between gap-2">
+                <h4 className="text-sm font-semibold text-gray-900">Vocabulary</h4>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setDraft((d) => (d ? { ...d, vocabulary: [...d.vocabulary, { word: "", definition: "" }] } : d))
+                  }
+                  className="text-xs font-semibold text-emerald-700 hover:text-emerald-800"
+                >
+                  + Add word
+                </button>
+              </div>
+              <ul className="mt-3 space-y-3">
+                {draft.vocabulary.map((entry, index) => (
+                  <li key={`voc-${index}`} className="rounded-lg border border-gray-100 bg-gray-50/80 p-3">
+                    <div className="mb-2 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setDraft((d) =>
+                            d
+                              ? {
+                                  ...d,
+                                  vocabulary: d.vocabulary.filter((_, i) => i !== index),
+                                }
+                              : d
+                          )
+                        }
+                        className="text-xs font-medium text-red-600 hover:text-red-700"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <input
+                        placeholder="Word"
+                        value={entry.word}
+                        onChange={(e) =>
+                          setDraft((d) => {
+                            if (!d) return d;
+                            const next = [...d.vocabulary];
+                            next[index] = { ...next[index], word: e.target.value };
+                            return { ...d, vocabulary: next };
+                          })
+                        }
+                        className={inputClass}
+                      />
+                      <input
+                        placeholder="Definition"
+                        value={entry.definition}
+                        onChange={(e) =>
+                          setDraft((d) => {
+                            if (!d) return d;
+                            const next = [...d.vocabulary];
+                            next[index] = { ...next[index], definition: e.target.value };
+                            return { ...d, vocabulary: next };
+                          })
+                        }
+                        className={inputClass}
+                      />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <label className="block space-y-1">
+              <span className="text-sm font-medium text-gray-700">Story body</span>
+              <textarea
+                value={draft.body}
+                onChange={(e) => setDraft((d) => (d ? { ...d, body: e.target.value } : d))}
+                rows={14}
+                className={`${inputClass} font-mono text-xs leading-relaxed sm:text-sm`}
+              />
+            </label>
+
+            <p className="text-xs text-gray-500">
+              Published state and school metadata are shown in view mode only and are not changed here.
+            </p>
+          </div>
         ) : (
           <div className="space-y-6 p-6">
             <div className="flex flex-col gap-4 sm:flex-row">
@@ -579,6 +1211,7 @@ export default function TeacherStoriesPage() {
         isLoading={isStoryDetailPending}
         isOpen={!!selectedStory}
         onClose={() => setSelectedStory(null)}
+        gradeOptions={gradeOptions}
       />
 
       <GenerateStoriesModal

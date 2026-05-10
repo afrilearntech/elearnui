@@ -2,7 +2,16 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { useAccessibility } from '@/contexts/AccessibilityContext';
+import type { LucideIcon } from "lucide-react";
+import {
+  GraduationCap,
+  Home,
+  Library,
+  School,
+  Shield,
+  UsersRound,
+} from "lucide-react";
+import { useAccessibility } from "@/contexts/AccessibilityContext";
 
 type PrimaryRole = "student" | "non-student";
 
@@ -10,6 +19,7 @@ type RoleCard = {
   id: string;
   title: string;
   description: string;
+  Icon: LucideIcon;
 };
 
 const primaryRoles: RoleCard[] = [
@@ -17,11 +27,13 @@ const primaryRoles: RoleCard[] = [
     id: "student",
     title: "Student",
     description: "Access courses, complete assignments, and track your learning progress.",
+    Icon: GraduationCap,
   },
   {
     id: "non-student",
     title: "Non-Student",
     description: "Upload and manage learning materials and quizzes for all grade levels.",
+    Icon: UsersRound,
   },
 ];
 
@@ -30,21 +42,25 @@ const nonStudentRoles: RoleCard[] = [
     id: "content-manager",
     title: "Content Manager",
     description: "Review and approve uploaded subjects before publication.",
+    Icon: Library,
   },
   {
     id: "parent",
     title: "Parent",
     description: "Upload and manage learning materials and quizzes for all grade levels.",
+    Icon: Home,
   },
   {
     id: "administrator",
     title: "Administrator",
     description: "Review and approve uploaded subjects before publication.",
+    Icon: Shield,
   },
   {
     id: "teacher",
     title: "Teacher",
     description: "Review and approve uploaded subjects before publication.",
+    Icon: School,
   },
 ];
 
@@ -179,6 +195,7 @@ export default function SignInPage() {
         >
           {currentRoles.map((role) => {
             const isSelected = role.id === selectedRoleId;
+            const RoleIcon = role.Icon;
             return (
               <button
                 key={role.id}
@@ -238,11 +255,12 @@ export default function SignInPage() {
                   }`}
                 >
                   <span
-                    className={`w-12 h-12 rounded-full flex items-center justify-center border ${
+                    className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full border ${
                       isSelected ? "border-[#10B981]" : "border-[#D1D5DB]"
                     }`}
+                    aria-hidden
                   >
-                    <span className="text-[#059669] text-xl">📝</span>
+                    <RoleIcon className="h-6 w-6 text-[#059669]" strokeWidth={2} />
                   </span>
                   <div>
                     <h2

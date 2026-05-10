@@ -7,6 +7,9 @@ import { getGeneralAssessments, GeneralAssessment } from "@/lib/api/parent-teach
 import { showErrorToast } from "@/lib/toast";
 import CreateGeneralAssessmentModal from "@/components/parent-teacher/teacher/CreateGeneralAssessmentModal";
 import AddQuestionsModal from "@/components/parent-teacher/teacher/AddQuestionsModal";
+import EditTeacherAssessmentModal from "@/components/parent-teacher/teacher/EditTeacherAssessmentModal";
+import EditAssessmentQuestionsModal from "@/components/parent-teacher/teacher/EditAssessmentQuestionsModal";
+import AssessmentTableActionsMenu from "@/components/parent-teacher/teacher/AssessmentTableActionsMenu";
 
 interface Assessment {
   id: number;
@@ -17,6 +20,21 @@ interface Assessment {
   maxScore: number;
   status: string;
   createdDate: string;
+  instructions: string;
+}
+
+function mapGeneralRows(data: GeneralAssessment[]): Assessment[] {
+  return data.map((assessment) => ({
+    id: assessment.id,
+    title: assessment.title,
+    grade: assessment.grade,
+    type: assessment.type,
+    dueDate: assessment.due_at,
+    maxScore: assessment.marks,
+    status: assessment.status,
+    createdDate: assessment.created_at,
+    instructions: assessment.instructions ?? "",
+  }));
 }
 
 
@@ -67,24 +85,23 @@ export default function TeacherAssessmentsPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isQuestionsModalOpen, setIsQuestionsModalOpen] = useState(false);
   const [selectedAssessment, setSelectedAssessment] = useState<Assessment | null>(null);
+  const [editAssessment, setEditAssessment] = useState<Assessment | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [openActionsRowKey, setOpenActionsRowKey] = useState<string | null>(null);
+  const [isEditQuestionsModalOpen, setIsEditQuestionsModalOpen] = useState(false);
+  const [editQuestionsAssessment, setEditQuestionsAssessment] = useState<Assessment | null>(null);
   const pageSize = 10;
+
+  const refreshAssessments = async () => {
+    const data = await getGeneralAssessments();
+    setAssessments(mapGeneralRows(data));
+  };
 
   useEffect(() => {
     const fetchAssessments = async () => {
       try {
         setIsLoading(true);
-        const data = await getGeneralAssessments();
-        const mappedAssessments: Assessment[] = data.map((assessment) => ({
-          id: assessment.id,
-          title: assessment.title,
-          grade: assessment.grade,
-          type: assessment.type,
-          dueDate: assessment.due_at,
-          maxScore: assessment.marks,
-          status: assessment.status,
-          createdDate: assessment.created_at,
-        }));
-        setAssessments(mappedAssessments);
+        await refreshAssessments();
       } catch (error) {
         console.error("Error fetching assessments:", error);
         showErrorToast("Failed to load assessments. Please try again.");
@@ -93,7 +110,7 @@ export default function TeacherAssessmentsPage() {
       }
     };
 
-    fetchAssessments();
+    void fetchAssessments();
   }, []);
 
   const grades = useMemo(() => {
@@ -285,17 +302,40 @@ export default function TeacherAssessmentsPage() {
                         {formatDate(assessment.dueDate)}
                       </div>
                       <div className="md:text-right">
-                        <button
-                          onClick={() => {
-                            setSelectedAssessment(assessment);
-                            setIsQuestionsModalOpen(true);
-                          }}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
-                        >
-                          <Icon icon="solar:question-circle-bold" className="w-4 h-4" />
-                          <span className="hidden sm:inline">Add Questions</span>
-                          <span className="sm:hidden">Questions</span>
-                        </button>
+                        <AssessmentTableActionsMenu
+                          rowKey={String(assessment.id)}
+                          openRowKey={openActionsRowKey}
+                          onOpenChange={setOpenActionsRowKey}
+                          items={[
+                            {
+                              id: "edit",
+                              label: "Edit assessment",
+                              icon: "solar:pen-new-square-bold",
+                              onClick: () => {
+                                setEditAssessment(assessment);
+                                setIsEditModalOpen(true);
+                              },
+                            },
+                            {
+                              id: "add-questions",
+                              label: "Add questions",
+                              icon: "solar:add-circle-bold",
+                              onClick: () => {
+                                setSelectedAssessment(assessment);
+                                setIsQuestionsModalOpen(true);
+                              },
+                            },
+                            {
+                              id: "edit-questions",
+                              label: "Edit questions",
+                              icon: "solar:clipboard-list-bold",
+                              onClick: () => {
+                                setEditQuestionsAssessment(assessment);
+                                setIsEditQuestionsModalOpen(true);
+                              },
+                            },
+                          ]}
+                        />
                       </div>
                       <div className="md:hidden space-y-1 mt-2">
                         <div className="flex items-center justify-between text-xs">
@@ -411,22 +451,39 @@ export default function TeacherAssessmentsPage() {
         onClose={() => setIsCreateModalOpen(false)}
         onSuccess={async () => {
           try {
-            const data = await getGeneralAssessments();
-            const mappedAssessments: Assessment[] = data.map((assessment) => ({
-              id: assessment.id,
-              title: assessment.title,
-              grade: assessment.grade,
-              type: assessment.type,
-              dueDate: assessment.due_at,
-              maxScore: assessment.marks,
-              status: assessment.status,
-              createdDate: assessment.created_at,
-            }));
-            setAssessments(mappedAssessments);
+            await refreshAssessments();
           } catch (error) {
             console.error("Error refreshing assessments:", error);
           }
         }}
+      />
+      <EditTeacherAssessmentModal
+        isOpen={isEditModalOpen}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setEditAssessment(null);
+        }}
+        onSuccess={async () => {
+          try {
+            await refreshAssessments();
+          } catch (error) {
+            console.error("Error refreshing assessments:", error);
+          }
+        }}
+        assessment={
+          editAssessment
+            ? {
+                id: editAssessment.id,
+                scope: "general",
+                title: editAssessment.title,
+                type: editAssessment.type === "ASSIGNMENT" ? "ASSIGNMENT" : "QUIZ",
+                instructions: editAssessment.instructions,
+                marks: editAssessment.maxScore,
+                due_at: editAssessment.dueDate,
+                grade: editAssessment.grade,
+              }
+            : null
+        }
       />
       {selectedAssessment && (
         <AddQuestionsModal
@@ -440,6 +497,18 @@ export default function TeacherAssessmentsPage() {
           assessmentTitle={selectedAssessment.title}
         />
       )}
+      {editQuestionsAssessment ? (
+        <EditAssessmentQuestionsModal
+          isOpen={isEditQuestionsModalOpen}
+          onClose={() => {
+            setIsEditQuestionsModalOpen(false);
+            setEditQuestionsAssessment(null);
+          }}
+          assessmentId={editQuestionsAssessment.id}
+          assessmentType="general"
+          assessmentTitle={editQuestionsAssessment.title}
+        />
+      ) : null}
     </DashboardLayout>
   );
 }

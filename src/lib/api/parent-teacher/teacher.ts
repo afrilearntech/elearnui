@@ -158,6 +158,26 @@ export async function createGeneralAssessment(payload: CreateGeneralAssessmentRe
   });
 }
 
+/** PATCH body per API — only these fields are sent. */
+export interface UpdateTeacherGeneralAssessmentRequest {
+  title: string;
+  type: "QUIZ" | "ASSIGNMENT";
+  instructions: string;
+  marks: number;
+  due_at: string;
+  grade: string;
+}
+
+export async function updateTeacherGeneralAssessment(
+  id: number,
+  payload: UpdateTeacherGeneralAssessmentRequest,
+): Promise<GeneralAssessment> {
+  return await apiRequest<GeneralAssessment>(`/teacher/general-assessments/${id}/`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
 export interface CreateTeacherRequest {
   name: string;
   phone: string;
@@ -911,6 +931,30 @@ export async function getTeacherStoryDetail(id: number): Promise<TeacherStoryDet
   return await apiRequest<TeacherStoryDetail>(`/teacher/stories/${id}/`);
 }
 
+/** PATCH body for `/teacher/stories/{id}/update/` */
+export interface UpdateTeacherStoryRequest {
+  title: string;
+  grade: string;
+  tag: string;
+  estimated_minutes: number;
+  cover_image: {
+    prompt: string;
+    image_url: string;
+    alt_text: string;
+  };
+  characters: TeacherStoryCharacter[];
+  vocabulary: TeacherStoryVocabulary[];
+  moral: string;
+  body: string;
+}
+
+export async function updateTeacherStory(id: number, payload: UpdateTeacherStoryRequest): Promise<TeacherStoryDetail> {
+  return await apiRequest<TeacherStoryDetail>(`/teacher/stories/${id}/update/`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function generateTeacherStories(
   payload: GenerateTeacherStoriesRequest
 ): Promise<GenerateTeacherStoriesResponse> {
@@ -1000,39 +1044,83 @@ export interface GeneratedLessonAssessment {
   updated_at: string;
 }
 
+/** Who receives AI-generated assessments: one learner, or everyone in that learner's class. */
+export type AssessmentAiTargetScope = "student" | "class";
+
+export interface GenerateAiAssessmentsRequestBody {
+  target_scope: AssessmentAiTargetScope;
+  student_id: number;
+}
+
 export interface GenerateAiAssessmentsResponse {
+  target_scope?: AssessmentAiTargetScope;
+  student_id?: number;
   general_assessments: GeneratedGeneralAssessment[];
   lesson_assessments: GeneratedLessonAssessment[];
 }
 
+function normalizeGenerateAiResponse(data: unknown): GenerateAiAssessmentsResponse {
+  const raw = data as Record<string, unknown> | null;
+  if (!raw || typeof raw !== "object") {
+    return { general_assessments: [], lesson_assessments: [] };
+  }
+  const general = raw.general_assessments;
+  const lesson = raw.lesson_assessments;
+  return {
+    target_scope:
+      raw.target_scope === "student" || raw.target_scope === "class" ? raw.target_scope : undefined,
+    student_id: typeof raw.student_id === "number" ? raw.student_id : undefined,
+    general_assessments: Array.isArray(general) ? (general as GeneratedGeneralAssessment[]) : [],
+    lesson_assessments: Array.isArray(lesson) ? (lesson as GeneratedLessonAssessment[]) : [],
+  };
+}
+
 /**
- * Backend docs vary between `/teacher/{id}/generate-ai-assessments/{pk}/`
- * and `/teacher/{id}/generate-ai-assessments/`. Try both to stay compatible.
+ * POST AI assessment generation. Sends `{ target_scope, student_id }`:
+ * - `student`: assessments for that student only
+ * - `class`: assessments for that student's whole class (student_id identifies the class)
+ *
+ * Tries JSON body on list and detail URLs first, then legacy student-only fallbacks.
  */
-export async function generateAiAssessmentsForStudent(
+export async function generateAiAssessments(
   teacherId: number,
-  studentPk: number
+  params: GenerateAiAssessmentsRequestBody
 ): Promise<GenerateAiAssessmentsResponse> {
-  const attempts: Array<() => Promise<GenerateAiAssessmentsResponse>> = [
+  const { student_id, target_scope } = params;
+  const body = JSON.stringify({ student_id, target_scope });
+
+  const attempts: Array<() => Promise<unknown>> = [
     () =>
-      apiRequest<GenerateAiAssessmentsResponse>(
-        `/teacher/${teacherId}/generate-ai-assessments/${studentPk}/`,
-        { method: "POST" }
-      ),
+      apiRequest<unknown>(`/teacher/${teacherId}/generate-ai-assessments/`, {
+        method: "POST",
+        body,
+      }),
     () =>
-      apiRequest<GenerateAiAssessmentsResponse>(
-        `/teacher/${teacherId}/generate-ai-assessments/`,
-        {
-          method: "POST",
-          body: JSON.stringify({ pk: studentPk }),
-        }
-      ),
+      apiRequest<unknown>(`/teacher/${teacherId}/generate-ai-assessments/${student_id}/`, {
+        method: "POST",
+        body,
+      }),
   ];
+
+  if (target_scope === "student") {
+    attempts.push(
+      () =>
+        apiRequest<unknown>(`/teacher/${teacherId}/generate-ai-assessments/${student_id}/`, {
+          method: "POST",
+        }),
+      () =>
+        apiRequest<unknown>(`/teacher/${teacherId}/generate-ai-assessments/`, {
+          method: "POST",
+          body: JSON.stringify({ pk: student_id }),
+        })
+    );
+  }
 
   let lastError: unknown = null;
   for (const attempt of attempts) {
     try {
-      return await attempt();
+      const data = await attempt();
+      return normalizeGenerateAiResponse(data);
     } catch (error) {
       lastError = error;
       if (error instanceof ApiClientError && [404, 405, 400].includes(error.status ?? 0)) {
@@ -1043,7 +1131,15 @@ export async function generateAiAssessmentsForStudent(
   }
 
   if (lastError instanceof Error) throw lastError;
-  throw new ApiClientError("Failed to generate AI assessments for this student.", 0);
+  throw new ApiClientError("Failed to generate AI assessments.", 0);
+}
+
+/** @deprecated Use {@link generateAiAssessments} with `target_scope: "student"`. */
+export async function generateAiAssessmentsForStudent(
+  teacherId: number,
+  studentPk: number
+): Promise<GenerateAiAssessmentsResponse> {
+  return generateAiAssessments(teacherId, { student_id: studentPk, target_scope: "student" });
 }
 
 export interface TeacherLesson {
@@ -1257,6 +1353,26 @@ export interface CreateLessonAssessmentResponse {
 export async function createLessonAssessment(payload: CreateLessonAssessmentRequest): Promise<CreateLessonAssessmentResponse> {
   return await apiRequest<CreateLessonAssessmentResponse>('/teacher/lesson-assessments/create/', {
     method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+/** PATCH body per API — only these fields are sent. */
+export interface UpdateTeacherLessonAssessmentRequest {
+  lesson: number;
+  type: "QUIZ" | "ASSIGNMENT";
+  title: string;
+  instructions: string;
+  marks: number;
+  due_at: string;
+}
+
+export async function updateTeacherLessonAssessment(
+  id: number,
+  payload: UpdateTeacherLessonAssessmentRequest,
+): Promise<TeacherLessonAssessment> {
+  return await apiRequest<TeacherLessonAssessment>(`/teacher/lesson-assessments/${id}/`, {
+    method: "PATCH",
     body: JSON.stringify(payload),
   });
 }
@@ -1541,6 +1657,23 @@ export async function getQuestions(params?: {
 export async function createQuestion(payload: CreateQuestionRequest): Promise<CreateQuestionResponse> {
   return await apiRequest<CreateQuestionResponse>('/teacher/questions/create/', {
     method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export interface UpdateTeacherQuestionRequest {
+  type: Question["type"];
+  question: string;
+  answer: string;
+  options: string[];
+}
+
+export async function updateTeacherQuestion(
+  questionId: number,
+  payload: UpdateTeacherQuestionRequest
+): Promise<Question> {
+  return await apiRequest<Question>(`/teacher/questions/${questionId}/`, {
+    method: "PATCH",
     body: JSON.stringify(payload),
   });
 }

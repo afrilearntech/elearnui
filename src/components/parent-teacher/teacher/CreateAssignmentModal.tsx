@@ -4,10 +4,11 @@ import { useState, useEffect, useMemo } from "react";
 import { Icon } from "@iconify/react";
 import {
   createLessonAssessment,
-  generateAiAssessmentsForStudent,
+  generateAiAssessments,
   getTeacherLessons,
   getTeacherStudents,
   getTeacherSubjects,
+  type AssessmentAiTargetScope,
   TeacherLesson,
   TeacherStudent,
   TeacherSubject,
@@ -34,6 +35,7 @@ export default function CreateAssignmentModal({ isOpen, onClose, onSuccess }: Cr
   const [studentGradeFilter, setStudentGradeFilter] = useState("All");
   const [studentSubjectFilter, setStudentSubjectFilter] = useState("All");
   const [selectedStudentId, setSelectedStudentId] = useState<number | null>(null);
+  const [aiTargetScope, setAiTargetScope] = useState<AssessmentAiTargetScope>("student");
   const [lessonSearch, setLessonSearch] = useState("");
   const [lessonGradeFilter, setLessonGradeFilter] = useState("All");
   const [lessonSubjectFilter, setLessonSubjectFilter] = useState("All");
@@ -166,6 +168,7 @@ export default function CreateAssignmentModal({ isOpen, onClose, onSuccess }: Cr
     setStudentGradeFilter("All");
     setStudentSubjectFilter("All");
     setSelectedStudentId(null);
+    setAiTargetScope("student");
   };
 
   const readTeacherUserId = () => {
@@ -209,16 +212,23 @@ export default function CreateAssignmentModal({ isOpen, onClose, onSuccess }: Cr
 
     setIsGeneratingAi(true);
     try {
-      const result = await generateAiAssessmentsForStudent(teacherId, selectedStudentId);
+      const result = await generateAiAssessments(teacherId, {
+        student_id: selectedStudentId,
+        target_scope: aiTargetScope,
+      });
       const total =
         (result.general_assessments?.length ?? 0) + (result.lesson_assessments?.length ?? 0);
       if (total === 0) {
         showSuccessToast("No new AI assessments were generated.");
       } else {
-        showSuccessToast(`Generated ${total} AI assessment${total === 1 ? "" : "s"} successfully.`);
+        const scopeLabel = aiTargetScope === "class" ? " for the class" : "";
+        showSuccessToast(
+          `Generated ${total} AI assessment${total === 1 ? "" : "s"}${scopeLabel} successfully.`
+        );
       }
       onSuccess();
       setSelectedStudentId(null);
+      setAiTargetScope("student");
       setIsAiStudentPickerOpen(false);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to generate AI assessments.";
@@ -534,7 +544,46 @@ export default function CreateAssignmentModal({ isOpen, onClose, onSuccess }: Cr
                   <Icon icon="solar:close-circle-bold" className="w-6 h-6" />
                 </button>
               </div>
-              <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="mt-4 space-y-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
+                    Who should get these assessments?
+                  </p>
+                  <div
+                    className="inline-flex rounded-xl border border-gray-200 bg-gray-50 p-1"
+                    role="group"
+                    aria-label="Assessment audience"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setAiTargetScope("student")}
+                      className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
+                        aiTargetScope === "student"
+                          ? "bg-white text-indigo-700 shadow-sm"
+                          : "text-gray-600 hover:text-gray-900"
+                      }`}
+                    >
+                      This student only
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAiTargetScope("class")}
+                      className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
+                        aiTargetScope === "class"
+                          ? "bg-white text-indigo-700 shadow-sm"
+                          : "text-gray-600 hover:text-gray-900"
+                      }`}
+                    >
+                      Full class
+                    </button>
+                  </div>
+                  <p className="mt-2 text-xs text-gray-500">
+                    {aiTargetScope === "student"
+                      ? "Pick the learner below. AI assessments will target only that student."
+                      : "Pick any approved student from the class below. AI assessments will be created for everyone in that student's class."}
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <input
                   type="text"
                   value={studentSearch}
@@ -564,6 +613,7 @@ export default function CreateAssignmentModal({ isOpen, onClose, onSuccess }: Cr
                     </option>
                   ))}
                 </select>
+              </div>
               </div>
             </div>
             <div className="max-h-[55vh] overflow-y-auto divide-y divide-gray-100">
