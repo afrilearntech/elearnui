@@ -1,4 +1,5 @@
-import { apiRequest, ApiClientError } from "../client";
+import { apiRequest, apiRequestAllPages, ApiClientError, getApiUrl, stripServerManagedFields } from "../client";
+import { validateImageUpload } from "@/lib/uploads";
 
 export type GameRecord = {
   id: number;
@@ -21,12 +22,12 @@ export async function getGames(token: string): Promise<GameRecord[]> {
     throw new ApiClientError("Authentication token is missing", 401);
   }
 
-  return apiRequest<GameRecord[]>("/content/games/", {
+  return apiRequestAllPages<GameRecord>("/content/games/", {
     method: "GET",
     headers: {
       Authorization: `Token ${token}`,
     },
-  });
+  }, ["games"]);
 }
 
 export type CreateGameRequest = {
@@ -48,6 +49,7 @@ export async function createGame(payload: CreateGameRequest, token: string): Pro
   }
 
   if (payload.image instanceof File) {
+    validateImageUpload(payload.image);
     const formData = new FormData();
     formData.append("name", payload.name);
     formData.append("instructions", payload.instructions);
@@ -55,15 +57,9 @@ export async function createGame(payload: CreateGameRequest, token: string): Pro
     formData.append("hint", payload.hint);
     formData.append("correct_answer", payload.correct_answer);
     formData.append("type", payload.type);
-    formData.append("status", payload.status);
     formData.append("image", payload.image);
 
-    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
-    if (!API_BASE_URL) {
-      throw new ApiClientError("API base URL is not configured", 0);
-    }
-
-    const response = await fetch(`${API_BASE_URL}/content/games/`, {
+    const response = await fetch(getApiUrl("/content/games/"), {
       method: "POST",
       headers: {
         Authorization: `Token ${token}`,
@@ -103,7 +99,7 @@ export async function createGame(payload: CreateGameRequest, token: string): Pro
     headers: {
       Authorization: `Token ${token}`,
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(stripServerManagedFields(payload)),
   });
 
   if (Array.isArray(response)) {
@@ -124,6 +120,7 @@ export async function updateGame(id: number, payload: UpdateGameRequest, token: 
   }
 
   if (payload.image instanceof File) {
+    validateImageUpload(payload.image);
     const formData = new FormData();
     if (payload.name !== undefined) formData.append("name", payload.name);
     if (payload.instructions !== undefined) formData.append("instructions", payload.instructions);
@@ -131,15 +128,9 @@ export async function updateGame(id: number, payload: UpdateGameRequest, token: 
     if (payload.hint !== undefined) formData.append("hint", payload.hint);
     if (payload.correct_answer !== undefined) formData.append("correct_answer", payload.correct_answer);
     if (payload.type !== undefined) formData.append("type", payload.type);
-    if (payload.status !== undefined) formData.append("status", payload.status);
     formData.append("image", payload.image);
 
-    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
-    if (!API_BASE_URL) {
-      throw new ApiClientError("API base URL is not configured", 0);
-    }
-
-    const response = await fetch(`${API_BASE_URL}/games/${id}/`, {
+    const response = await fetch(getApiUrl(`/games/${id}/`), {
       method: "PATCH",
       headers: {
         Authorization: `Token ${token}`,
@@ -172,7 +163,7 @@ export async function updateGame(id: number, payload: UpdateGameRequest, token: 
     headers: {
       Authorization: `Token ${token}`,
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(stripServerManagedFields(payload)),
   });
 }
 

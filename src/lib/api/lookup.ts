@@ -1,4 +1,4 @@
-import { apiRequest } from './client';
+import { apiRequestAllPages } from './client';
 
 export interface District {
   id: number;
@@ -37,13 +37,14 @@ export async function getDistricts(token: string): Promise<DistrictsResponse> {
     throw new Error('Authentication token is required');
   }
   
-  return apiRequest<DistrictsResponse>('/lookup/districts/', {
+  const results = await apiRequestAllPages<District>('/lookup/districts/', {
     method: 'GET',
     headers: {
       'Authorization': `Token ${authToken}`,
       'Content-Type': 'application/json',
     },
-  });
+  }, ['districts']);
+  return { count: results.length, next: null, previous: null, results };
 }
 
 export async function getSchools(token: string, districtId?: number): Promise<SchoolsResponse> {
@@ -53,23 +54,17 @@ export async function getSchools(token: string, districtId?: number): Promise<Sc
     throw new Error('Authentication token is required');
   }
   
-  const response = await apiRequest<SchoolsResponse>('/lookup/schools/', {
+  const endpoint = districtId
+    ? `/lookup/schools/?district_id=${encodeURIComponent(String(districtId))}`
+    : '/lookup/schools/';
+  const results = await apiRequestAllPages<School>(endpoint, {
     method: 'GET',
     headers: {
       'Authorization': `Token ${authToken}`,
       'Content-Type': 'application/json',
     },
-  });
-  
-  if (districtId) {
-    const filteredResults = response.results.filter(school => school.district_id === districtId);
-    return {
-      ...response,
-      results: filteredResults,
-      count: filteredResults.length,
-    };
-  }
-  
-  return response;
+  }, ['schools']);
+
+  return { count: results.length, next: null, previous: null, results };
 }
 

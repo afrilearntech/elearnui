@@ -70,8 +70,8 @@ export default function CreateSubjectPage() {
     const file = e.target.files?.[0];
     if (!file) return;
     setCoverError("");
-    if (file.size > 10 * 1024 * 1024) {
-      setCoverError("File too large (max 10MB)");
+    if (file.size > 5 * 1024 * 1024) {
+      setCoverError("File too large (max 5MB)");
       setCoverPreview(null);
       setCoverName("");
       setCoverFile(null);
@@ -463,12 +463,12 @@ export default function CreateSubjectPage() {
             <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 16l-4-4-4 4"/><path d="M12 12V3"/><path d="M20 21H4"/></svg>
             </div>
-            <p className="text-sm text-gray-600">Please select or drag and drop PNG, JPG, GIF</p>
-            <p className="text-xs text-gray-500">UP TO 10MB</p>
+            <p className="text-sm text-gray-600">Please select or drag and drop PNG, JPG, or WebP</p>
+            <p className="text-xs text-gray-500">UP TO 5MB</p>
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/png,image/jpeg,image/gif"
+              accept="image/jpeg,image/png,image/webp"
               className="hidden"
               onChange={onFileChange}
             />

@@ -121,8 +121,6 @@ export default function AddTeacherModal({
         ...(roleMode === "headteacher" ? { status: "APPROVED" } : {}),
       };
 
-      console.log('Sending payload:', payload);
-
       if (roleMode === "headteacher") {
         await createHeadTeacherTeacher(payload);
       } else {

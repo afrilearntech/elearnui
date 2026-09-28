@@ -712,8 +712,8 @@ function BulkUploadDistrictsModal({
       showErrorToast("Please select a CSV file.");
       return;
     }
-    if (file.size > 10 * 1024 * 1024) {
-      showErrorToast("File size must be less than 10MB.");
+    if (file.size > 2 * 1024 * 1024) {
+      showErrorToast("File size must be 2MB or less.");
       return;
     }
     setSelectedFile(file);
@@ -938,7 +938,7 @@ function BulkUploadDistrictsModal({
                     </button>
                   </p>
                   <p className="text-sm text-gray-500">
-                    CSV files only, maximum 10MB.
+                    CSV files only, maximum 2MB.
                   </p>
                 </div>
               ) : (

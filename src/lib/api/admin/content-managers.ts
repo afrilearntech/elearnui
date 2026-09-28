@@ -1,4 +1,5 @@
-import { apiRequest } from "../client";
+import { apiRequest, getApiUrl } from "../client";
+import { validateCsvUpload } from "@/lib/uploads";
 
 export interface ContentManager {
   id: number;
@@ -54,13 +55,8 @@ export async function createContentManager(data: CreateContentManagerRequest): P
 }
 
 export async function downloadContentManagerBulkTemplate(): Promise<Blob> {
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!API_BASE_URL) {
-    throw new Error("API base URL is not configured");
-  }
-
   const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
-  const url = `${API_BASE_URL}/admin/content-managers/bulk-template/`;
+  const url = getApiUrl('/admin/content-managers/bulk-template/');
 
   const response = await fetch(url, {
     method: "GET",
@@ -77,13 +73,9 @@ export async function downloadContentManagerBulkTemplate(): Promise<Blob> {
 }
 
 export async function bulkCreateContentManagers(file: File): Promise<BulkUploadContentManagerResponse> {
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!API_BASE_URL) {
-    throw new Error("API base URL is not configured");
-  }
-
+  validateCsvUpload(file);
   const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
-  const url = `${API_BASE_URL}/admin/content-managers/bulk-create/`;
+  const url = getApiUrl('/admin/content-managers/bulk-create/');
 
   const formData = new FormData();
   formData.append("file", file);
@@ -110,7 +102,6 @@ export async function bulkCreateContentManagers(file: File): Promise<BulkUploadC
         ? data.detail
         : `Request failed with status ${response.status}`;
 
-    const errors = isJson && data.errors ? data.errors : undefined;
     throw new Error(errorMessage);
   }
 

@@ -1,5 +1,6 @@
-import { apiRequest, ApiClientError } from "../client";
-import { normalizeAdminListResponse } from "./normalize";
+import { apiRequest, ApiClientError, getApiUrl } from "../client";
+import { fetchAdminList } from "./normalize";
+import { validateCsvUpload } from "@/lib/uploads";
 
 export interface TeacherProfile {
   id: number;
@@ -36,8 +37,7 @@ export interface TeacherRecord {
 }
 
 export async function getTeachers(): Promise<TeacherRecord[]> {
-  const response = await apiRequest<unknown>("/content/teachers/");
-  return normalizeAdminListResponse<TeacherRecord>(response, ["teachers"]);
+  return fetchAdminList<TeacherRecord>("/content/teachers/", ["teachers"]);
 }
 
 export interface CreateTeacherRequest {
@@ -103,13 +103,8 @@ export async function createTeacher(payload: CreateTeacherRequest): Promise<Crea
 }
 
 export async function downloadTeacherBulkTemplate(): Promise<Blob> {
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!API_BASE_URL) {
-    throw new ApiClientError('API base URL is not configured', 0);
-  }
-
   const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-  const url = `${API_BASE_URL}/content/teachers/bulk-template/`;
+  const url = getApiUrl('/content/teachers/bulk-template/');
 
   const response = await fetch(url, {
     method: 'GET',
@@ -139,16 +134,12 @@ export async function downloadTeacherBulkTemplate(): Promise<Blob> {
 }
 
 export async function bulkCreateTeachers(file: File): Promise<BulkUploadTeacherResponse> {
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!API_BASE_URL) {
-    throw new ApiClientError('API base URL is not configured', 0);
-  }
-
+  validateCsvUpload(file);
   const formData = new FormData();
   formData.append('file', file);
 
   const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-  const url = `${API_BASE_URL}/content/teachers/bulk-create/`;
+  const url = getApiUrl('/content/teachers/bulk-create/');
 
   const response = await fetch(url, {
     method: 'POST',

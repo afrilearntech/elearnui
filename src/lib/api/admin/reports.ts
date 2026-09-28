@@ -1,4 +1,4 @@
-import { apiRequest } from '../client';
+import { apiRequest, getApiUrl } from '../client';
 import { normalizeAdminListResponse } from './normalize';
 
 export interface ReportFilter {
@@ -112,11 +112,6 @@ export async function getSystemReports(filter?: ReportFilter): Promise<SystemRep
 }
 
 export async function exportReports(filter?: ReportFilter, format: 'csv' | 'pdf' = 'csv'): Promise<Blob> {
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!API_BASE_URL) {
-    throw new Error('API base URL is not configured');
-  }
-
   const queryParams = new URLSearchParams();
   
   if (filter) {
@@ -131,7 +126,7 @@ export async function exportReports(filter?: ReportFilter, format: 'csv' | 'pdf'
   queryParams.append('format', format);
 
   const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-  const url = `${API_BASE_URL}/admin/system-reports/export/?${queryParams.toString()}`;
+  const url = getApiUrl(`/admin/system-reports/export/?${queryParams.toString()}`);
 
   const response = await fetch(url, {
     method: 'GET',

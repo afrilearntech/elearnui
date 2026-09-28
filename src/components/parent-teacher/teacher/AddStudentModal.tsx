@@ -138,8 +138,6 @@ export default function AddStudentModal({
         ...(roleMode === "headteacher" && schoolId ? { school_id: schoolId } : {}),
       };
 
-      console.log('Sending payload:', payload); // Debug log
-
       if (roleMode === "headteacher") {
         if (!schoolId) {
           showErrorToast("School context not found. Please refresh and try again.");

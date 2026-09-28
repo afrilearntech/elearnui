@@ -1,5 +1,6 @@
-import { apiRequest, ApiClientError } from "../client";
-import { normalizeAdminListResponse } from "./normalize";
+import { apiRequest, ApiClientError, getApiUrl } from "../client";
+import { fetchAdminList } from "./normalize";
+import { validateCsvUpload } from "@/lib/uploads";
 
 export interface StudentRecord {
   id: number;
@@ -108,15 +109,10 @@ export interface BulkUploadStudentResponse {
 }
 
 export async function createStudent(payload: CreateStudentRequest): Promise<CreateStudentResponse> {
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!API_BASE_URL) {
-    throw new ApiClientError('API base URL is not configured', 0);
-  }
-
   // Both admins and teachers use the same endpoint.
   // - Teachers can rely on their own school context.
   // - Admins must pass an explicit `school_id` in the payload.
-  const url = `${API_BASE_URL}/teacher/students/create/`;
+  const url = getApiUrl('/teacher/students/create/');
   const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
 
   try {
@@ -166,13 +162,8 @@ export async function createStudent(payload: CreateStudentRequest): Promise<Crea
 }
 
 export async function downloadStudentBulkTemplate(): Promise<Blob> {
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!API_BASE_URL) {
-    throw new ApiClientError('API base URL is not configured', 0);
-  }
-
   const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-  const url = `${API_BASE_URL}/teacher/students/bulk-template/`;
+  const url = getApiUrl('/teacher/students/bulk-template/');
 
   const response = await fetch(url, {
     method: 'GET',
@@ -202,16 +193,12 @@ export async function downloadStudentBulkTemplate(): Promise<Blob> {
 }
 
 export async function bulkCreateStudents(file: File): Promise<BulkUploadStudentResponse> {
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!API_BASE_URL) {
-    throw new ApiClientError('API base URL is not configured', 0);
-  }
-
+  validateCsvUpload(file);
   const formData = new FormData();
   formData.append('file', file);
 
   const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-  const url = `${API_BASE_URL}/teacher/students/bulk-create/`;
+  const url = getApiUrl('/teacher/students/bulk-create/');
 
   const response = await fetch(url, {
     method: 'POST',
@@ -287,10 +274,7 @@ export interface ApproveRejectStudentResponse {
 }
 
 export async function getAdminStudents(): Promise<AdminStudent[]> {
-  const response = await apiRequest<unknown>("/admin/students/", {
-    method: "GET",
-  });
-  return normalizeAdminListResponse<AdminStudent>(response, ["students"]);
+  return fetchAdminList<AdminStudent>("/admin/students/", ["students"]);
 }
 
 export async function approveAdminStudent(studentId: number): Promise<ApproveRejectStudentResponse> {

@@ -1,5 +1,4 @@
-import { apiRequest } from "../client";
-import { normalizeAdminListResponse } from "./normalize";
+import { fetchAdminList } from "./normalize";
 
 export type GameStatus =
   | "APPROVED"
@@ -30,8 +29,7 @@ export interface Game {
 }
 
 export async function getGames(): Promise<Game[]> {
-  const response = await apiRequest<unknown>("/content/games/");
-  return normalizeAdminListResponse<Game>(response, ["games"]);
+  return fetchAdminList<Game>("/content/games/", ["games"]);
 }
 
 

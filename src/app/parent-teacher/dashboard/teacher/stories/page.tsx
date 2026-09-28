@@ -237,7 +237,7 @@ function StoryDetailsModal({
     const file = files?.[0];
     if (!file) return;
     if (!file.type.startsWith("image/")) {
-      showErrorToast("Please choose an image file (JPEG, PNG, WebP, or GIF).");
+      showErrorToast("Please choose a JPEG, PNG, or WebP image.");
       return;
     }
     if (file.size > COVER_IMAGE_MAX_UPLOAD_BYTES) {
@@ -453,7 +453,7 @@ function StoryDetailsModal({
             <div className="rounded-xl border border-gray-200 p-4">
               <h4 className="text-sm font-semibold text-gray-900">Cover image</h4>
               <p className="mt-1 text-xs text-gray-500">
-                Choose JPEG, PNG, WebP, or GIF from your device. Large images are resized automatically before saving.
+                Choose JPEG, PNG, or WebP from your device. Large images are resized automatically before saving.
               </p>
               <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start">
                 <div className="relative shrink-0 overflow-hidden rounded-xl border border-gray-200 bg-gray-50 sm:w-56">
@@ -473,7 +473,7 @@ function StoryDetailsModal({
                   <input
                     ref={coverFileInputRef}
                     type="file"
-                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    accept="image/jpeg,image/png,image/webp"
                     className="sr-only"
                     aria-label="Choose cover image file"
                     onChange={(e) => {

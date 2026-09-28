@@ -367,7 +367,7 @@ export default function CreateLessonModal({ isOpen, onClose, onSuccess }: Create
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="application/pdf,application/msword,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.wordprocessingml.document,video/*,audio/*"
+                accept=".pdf,.ppt,.pptx,.doc,.docx,.mp3,.mp4,.wav,.webm"
                 className="hidden"
                 onChange={handleResourceChange}
               />
@@ -422,7 +422,7 @@ export default function CreateLessonModal({ isOpen, onClose, onSuccess }: Create
               <input
                 ref={thumbnailInputRef}
                 type="file"
-                accept="image/png,image/jpeg,image/jpg"
+                accept="image/jpeg,image/png,image/webp"
                 className="hidden"
                 onChange={handleThumbnailChange}
               />

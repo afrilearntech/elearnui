@@ -66,9 +66,8 @@ export default function BulkUploadModal({
       return;
     }
 
-    // Validate file size (max 10MB)
-    if (file.size > 10 * 1024 * 1024) {
-      showErrorToast("File size must be less than 10MB.");
+    if (file.size > 2 * 1024 * 1024) {
+      showErrorToast("File size must be 2MB or less.");
       return;
     }
 
@@ -291,7 +290,7 @@ export default function BulkUploadModal({
                   </button>
                 </p>
                 <p className="text-sm text-gray-500">
-                  CSV files only, max 10MB
+                  CSV files only, max 2MB
                 </p>
               </div>
             ) : (

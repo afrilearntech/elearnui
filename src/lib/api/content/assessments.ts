@@ -1,4 +1,4 @@
-import { apiRequest, ApiClientError } from "../client";
+import { apiRequest, apiRequestAllPages, ApiClientError, stripServerManagedFields } from "../client";
 
 export type AssessmentRecord = {
   kind: "general" | "lesson";
@@ -27,18 +27,18 @@ export async function getAssessments(token: string): Promise<AssessmentRecord[]>
   }
 
   const [generalRaw, lessonRaw] = await Promise.all([
-    apiRequest<Array<Record<string, unknown>>>("/content/general-assessments/", {
+    apiRequestAllPages<Record<string, unknown>>("/content/general-assessments/", {
       method: "GET",
       headers: {
         Authorization: `Token ${token}`,
       },
-    }),
-    apiRequest<Array<Record<string, unknown>>>("/content/lesson-assessments/", {
+    }, ["assessments"]),
+    apiRequestAllPages<Record<string, unknown>>("/content/lesson-assessments/", {
       method: "GET",
       headers: {
         Authorization: `Token ${token}`,
       },
-    }),
+    }, ["assessments"]),
   ]);
 
   const general = generalRaw.map((item) => ({
@@ -155,7 +155,7 @@ export async function createGeneralAssessment(
     AssessmentRecord | AssessmentRecord[]
   >(
     ["/content/general-assessments/", "/content/general-assessments/create/", "/teacher/general-assessments/create/"],
-    payload,
+    stripServerManagedFields(payload),
     token,
   );
 
@@ -182,7 +182,7 @@ export async function createLessonAssessment(
     AssessmentRecord | AssessmentRecord[]
   >(
     ["/content/lesson-assessments/", "/content/lesson-assessments/create/", "/teacher/lesson-assessments/create/"],
-    payload,
+    stripServerManagedFields(payload),
     token,
   );
 

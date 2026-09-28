@@ -8,9 +8,8 @@ import {
   createGeneralAssessment,
   createLessonAssessment,
   createContentQuestion,
-  updateContentAssessmentStatus,
 } from "@/lib/api/content/assessments";
-import { getLessons, LessonRecord } from "@/lib/api/content/lessons";
+import { getLessons, LessonRecord, moderateContent } from "@/lib/api/content/lessons";
 
 type AssessmentRow = {
   id: string;
@@ -359,38 +358,13 @@ export default function AssessmentsPage() {
         const nextStatus =
           action === "approve" ? "APPROVED" : action === "reject" ? "REJECTED" : "REQUEST_CHANGES";
 
-        const response = await updateContentAssessmentStatus(
-          modalAssessment.kind,
-          assessmentId,
-          modalAssessment.kind === "general"
-            ? {
-                title: modalAssessment.title,
-                type: modalAssessment.type as "QUIZ" | "ASSIGNMENT" | "TRIAL",
-                given_by: modalAssessment.creatorId,
-                instructions: modalAssessment.instructions,
-                marks: modalAssessment.marks,
-                due_at: modalAssessment.dueDate,
-                grade: modalAssessment.grade,
-                ai_recommended: modalAssessment.aiRecommended,
-                is_targeted: modalAssessment.isTargeted,
-                target_student: modalAssessment.targetStudent,
-                status: nextStatus,
-                moderation_comment: comment ?? modalAssessment.moderation_comment ?? "",
-              }
-            : {
-                lesson: Number(modalAssessment.lessonId ?? 0),
-                type: modalAssessment.type as "QUIZ" | "ASSIGNMENT" | "TRIAL",
-                given_by: modalAssessment.creatorId,
-                title: modalAssessment.title,
-                instructions: modalAssessment.instructions,
-                marks: modalAssessment.marks,
-                due_at: modalAssessment.dueDate,
-                ai_recommended: modalAssessment.aiRecommended,
-                is_targeted: modalAssessment.isTargeted,
-                target_student: modalAssessment.targetStudent,
-                status: nextStatus,
-                moderation_comment: comment ?? modalAssessment.moderation_comment ?? "",
-              },
+        const response = await moderateContent(
+          {
+            model: modalAssessment.kind === "general" ? "general_assessment" : "lesson_assessment",
+            id: assessmentId,
+            action,
+            moderation_comment: comment ?? modalAssessment.moderation_comment ?? "",
+          },
           token,
         );
         const normalizedStatus = normalizeStatus(

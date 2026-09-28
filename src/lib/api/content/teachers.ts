@@ -1,4 +1,4 @@
-import { apiRequest, ApiClientError } from "../client";
+import { apiRequest, apiRequestAllPages, ApiClientError } from "../client";
 import { ModerateAction, ModerateContentRequest, ModerateContentResponse } from "./lessons";
 
 export type TeacherProfile = {
@@ -33,12 +33,12 @@ export async function getTeachers(token: string): Promise<TeacherRecord[]> {
     throw new ApiClientError("Authentication token is missing", 401);
   }
 
-  return apiRequest<TeacherRecord[]>("/content/teachers/", {
+  return apiRequestAllPages<TeacherRecord>("/content/teachers/", {
     method: "GET",
     headers: {
       Authorization: `Token ${token}`,
     },
-  });
+  }, ["teachers"]);
 }
 
 export async function moderateTeacher(
@@ -58,7 +58,7 @@ export async function moderateTeacher(
   }
 
   const payload: ModerateContentRequest = {
-    model: "school",
+    model: "teacher",
     id: teacherId,
     action,
     moderation_comment: moderationComment,

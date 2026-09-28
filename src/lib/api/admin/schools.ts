@@ -1,5 +1,6 @@
-import { apiRequest } from '../client';
-import { normalizeAdminListResponse } from './normalize';
+import { apiRequest, getApiUrl } from '../client';
+import { fetchAdminList } from './normalize';
+import { validateCsvUpload } from '@/lib/uploads';
 
 export interface School {
   id: number;
@@ -39,8 +40,7 @@ export interface BulkUploadSchoolResponse {
 }
 
 export async function getSchools(): Promise<School[]> {
-  const response = await apiRequest<unknown>('/admin/schools/');
-  return normalizeAdminListResponse<School>(response, ['schools']);
+  return fetchAdminList<School>('/admin/schools/', ['schools']);
 }
 
 export async function createSchool(data: CreateSchoolRequest): Promise<School> {
@@ -50,10 +50,24 @@ export async function createSchool(data: CreateSchoolRequest): Promise<School> {
   });
 }
 
+export async function updateSchoolModeration(
+  id: number,
+  status: School['status'],
+  moderationComment: string,
+): Promise<School> {
+  return apiRequest<School>(`/admin/schools/${id}/`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      status,
+      moderation_comment: moderationComment.trim(),
+    }),
+  });
+}
+
 export async function downloadSchoolBulkTemplate(): Promise<Blob> {
   // The schools bulk template endpoint returns a file (CSV).
   const response = await fetch(
-    `${process.env.NEXT_PUBLIC_API_BASE_URL}/admin/schools/bulk-template/`,
+    getApiUrl('/admin/schools/bulk-template/'),
     {
       method: 'GET',
       headers: {
@@ -73,15 +87,11 @@ export async function downloadSchoolBulkTemplate(): Promise<Blob> {
 }
 
 export async function bulkCreateSchools(file: File): Promise<BulkUploadSchoolResponse> {
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!API_BASE_URL) {
-    throw new Error('API base URL is not configured');
-  }
-
+  validateCsvUpload(file);
   const formData = new FormData();
   formData.append('file', file);
 
-  const response = await fetch(`${API_BASE_URL}/admin/schools/bulk-create/`, {
+  const response = await fetch(getApiUrl('/admin/schools/bulk-create/'), {
     method: 'POST',
     headers: {
       ...(typeof window !== 'undefined' &&

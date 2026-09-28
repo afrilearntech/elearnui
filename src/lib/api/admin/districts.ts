@@ -1,5 +1,6 @@
-import { apiRequest } from '../client';
-import { normalizeAdminListResponse } from './normalize';
+import { apiRequest, getApiUrl } from '../client';
+import { fetchAdminList } from './normalize';
+import { validateCsvUpload } from '@/lib/uploads';
 
 export interface District {
   id: number;
@@ -45,8 +46,7 @@ export interface BulkUploadDistrictResponse {
 }
 
 export async function getDistricts(): Promise<District[]> {
-  const response = await apiRequest<unknown>('/admin/districts/');
-  return normalizeAdminListResponse<District>(response, ['districts']);
+  return fetchAdminList<District>('/admin/districts/', ['districts']);
 }
 
 export async function getApprovedDistricts(): Promise<District[]> {
@@ -69,12 +69,7 @@ export async function createDistrict(data: CreateDistrictRequest): Promise<Distr
 }
 
 export async function downloadDistrictBulkTemplate(): Promise<Blob> {
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!API_BASE_URL) {
-    throw new Error('API base URL is not configured');
-  }
-
-  const response = await fetch(`${API_BASE_URL}/admin/districts/bulk-template/`, {
+  const response = await fetch(getApiUrl('/admin/districts/bulk-template/'), {
     method: 'GET',
     headers: {
       ...(typeof window !== 'undefined' && localStorage.getItem('auth_token') && {
@@ -91,15 +86,11 @@ export async function downloadDistrictBulkTemplate(): Promise<Blob> {
 }
 
 export async function bulkCreateDistricts(file: File): Promise<BulkUploadDistrictResponse> {
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!API_BASE_URL) {
-    throw new Error('API base URL is not configured');
-  }
-
+  validateCsvUpload(file);
   const formData = new FormData();
   formData.append('file', file);
 
-  const response = await fetch(`${API_BASE_URL}/admin/districts/bulk-create/`, {
+  const response = await fetch(getApiUrl('/admin/districts/bulk-create/'), {
     method: 'POST',
     headers: {
       ...(typeof window !== 'undefined' && localStorage.getItem('auth_token') && {

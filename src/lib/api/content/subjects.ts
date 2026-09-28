@@ -1,4 +1,5 @@
-import { apiRequest, ApiClientError } from "../client";
+import { apiRequest, apiRequestAllPages, ApiClientError, getApiUrl, stripServerManagedFields } from "../client";
+import { validateImageUpload } from "@/lib/uploads";
 
 export type ObjectiveItem = {
   id: number;
@@ -27,20 +28,12 @@ export async function getSubjects(token: string): Promise<SubjectRecord[]> {
     throw new ApiClientError("Authentication token is missing", 401);
   }
 
-  const response = await apiRequest<
-    SubjectRecord[] | { results?: SubjectRecord[]; subjects?: SubjectRecord[]; data?: SubjectRecord[] }
-  >("/content/subjects/?limit=1000", {
+  return apiRequestAllPages<SubjectRecord>("/content/subjects/", {
     method: "GET",
     headers: {
       Authorization: `Token ${token}`,
     },
-  });
-
-  if (Array.isArray(response)) return response;
-  if (Array.isArray(response.results)) return response.results;
-  if (Array.isArray(response.subjects)) return response.subjects;
-  if (Array.isArray(response.data)) return response.data;
-  return [];
+  }, ["subjects"]);
 }
 
 export type CreateSubjectRequest = {
@@ -63,24 +56,16 @@ export async function createSubject(
     throw new ApiClientError("Authentication token is missing", 401);
   }
 
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!API_BASE_URL) {
-    throw new ApiClientError('API base URL is not configured', 0);
-  }
-
-  const url = `${API_BASE_URL}/content/subjects/`;
+  const url = getApiUrl("/content/subjects/");
 
   if (payload.thumbnail instanceof File) {
+    validateImageUpload(payload.thumbnail);
     const formData = new FormData();
     formData.append('name', payload.name);
     formData.append('grade', payload.grade);
-    formData.append('status', payload.status);
     formData.append('description', payload.description);
     formData.append('thumbnail', payload.thumbnail);
     formData.append('objectives', payload.objectives);
-    if (payload.moderation_comment) {
-      formData.append('moderation_comment', payload.moderation_comment);
-    }
 
     const response = await fetch(url, {
       method: "POST",
@@ -116,7 +101,7 @@ export async function createSubject(
         Authorization: `Token ${token}`,
       },
       body: JSON.stringify({
-        ...payload,
+        ...stripServerManagedFields(payload),
         thumbnail: payload.thumbnail || null,
       }),
     });
@@ -162,21 +147,13 @@ export async function getTopics(token: string, subjectId: number): Promise<Topic
     throw new ApiClientError("Subject ID is required", 400);
   }
 
-  const url = `/topics/?subject=${subjectId}&limit=1000`;
-  const response = await apiRequest<
-    TopicRecord[] | { results?: TopicRecord[]; topics?: TopicRecord[]; data?: TopicRecord[] }
-  >(url, {
+  const url = `/topics/?subject=${subjectId}`;
+  return apiRequestAllPages<TopicRecord>(url, {
     method: "GET",
     headers: {
       Authorization: `Token ${token}`,
     },
-  });
-
-  if (Array.isArray(response)) return response;
-  if (Array.isArray(response.results)) return response.results;
-  if (Array.isArray(response.topics)) return response.topics;
-  if (Array.isArray(response.data)) return response.data;
-  return [];
+  }, ["topics"]);
 }
 
 export type SubjectDetailRecord = {
@@ -226,12 +203,7 @@ export async function deleteSubject(
     throw new ApiClientError("Authentication token is missing", 401);
   }
 
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!API_BASE_URL) {
-    throw new ApiClientError("API base URL is not configured", 0);
-  }
-
-  const response = await fetch(`${API_BASE_URL}/subjects/${id}/`, {
+  const response = await fetch(getApiUrl(`/subjects/${id}/`), {
     method: "DELETE",
     headers: {
       Authorization: `Token ${token}`,
@@ -272,24 +244,16 @@ export async function updateSubject(
   }
 
   if (payload.thumbnail instanceof File) {
-    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
-    if (!API_BASE_URL) {
-      throw new ApiClientError("API base URL is not configured", 0);
-    }
-
+    validateImageUpload(payload.thumbnail);
     const formData = new FormData();
     if (payload.name !== undefined) formData.append("name", payload.name);
     if (payload.grade !== undefined) formData.append("grade", payload.grade);
-    if (payload.status !== undefined) formData.append("status", payload.status);
     if (payload.description !== undefined) formData.append("description", payload.description);
     formData.append("thumbnail", payload.thumbnail);
     if (payload.teachers !== undefined) {
       payload.teachers.forEach((teacherId) => {
         formData.append("teachers", teacherId.toString());
       });
-    }
-    if (payload.moderation_comment !== undefined && payload.moderation_comment !== null) {
-      formData.append("moderation_comment", payload.moderation_comment);
     }
     if (payload.objectives !== undefined) {
       if (Array.isArray(payload.objectives)) {
@@ -299,7 +263,7 @@ export async function updateSubject(
       }
     }
 
-    const response = await fetch(`${API_BASE_URL}/subjects/${id}/`, {
+    const response = await fetch(getApiUrl(`/subjects/${id}/`), {
       method: "PATCH",
       headers: {
         Authorization: `Token ${token}`,
@@ -327,7 +291,7 @@ export async function updateSubject(
     return data as SubjectDetailRecord;
   }
 
-  const jsonPayload: any = { ...payload };
+  const jsonPayload: Record<string, unknown> = stripServerManagedFields(payload);
   if (payload.objectives !== undefined && Array.isArray(payload.objectives)) {
     jsonPayload.objectives = payload.objectives;
   }

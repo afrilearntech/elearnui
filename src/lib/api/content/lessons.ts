@@ -1,4 +1,5 @@
-import { apiRequest, ApiClientError } from "../client";
+import { apiRequest, apiRequestAllPages, ApiClientError, getApiUrl, stripServerManagedFields } from "../client";
+import { validateDocumentUpload, validateImageUpload } from "@/lib/uploads";
 
 export type LessonRecord = {
   id: number;
@@ -40,12 +41,12 @@ export async function getLessons(token: string): Promise<LessonRecord[]> {
     throw new ApiClientError("Authentication token is missing", 401);
   }
 
-  return apiRequest<LessonRecord[]>("/content/lessons/", {
+  return apiRequestAllPages<LessonRecord>("/content/lessons/", {
     method: "GET",
     headers: {
       Authorization: `Token ${token}`,
     },
-  });
+  }, ["lessons"]);
 }
 
 function normalizeLessonResponse(response: LessonResponse): LessonRecord {
@@ -65,11 +66,8 @@ export async function createLesson(payload: CreateLessonRequest, token: string):
 
   const requiresFormData = payload.resource instanceof File || payload.thumbnail instanceof File;
   if (requiresFormData) {
-    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
-    if (!API_BASE_URL) {
-      throw new ApiClientError("API base URL is not configured", 0);
-    }
-
+    if (payload.resource instanceof File) validateDocumentUpload(payload.resource);
+    if (payload.thumbnail instanceof File) validateImageUpload(payload.thumbnail);
     const formData = new FormData();
     formData.append("subject", payload.subject.toString());
     formData.append("topic", payload.topic.toString());
@@ -77,11 +75,7 @@ export async function createLesson(payload: CreateLessonRequest, token: string):
     formData.append("title", payload.title);
     formData.append("description", payload.description);
     formData.append("type", payload.type);
-    formData.append("status", payload.status);
     formData.append("duration_minutes", payload.duration_minutes.toString());
-    if (payload.moderation_comment !== undefined && payload.moderation_comment !== null) {
-      formData.append("moderation_comment", payload.moderation_comment);
-    }
     if (payload.resource instanceof File) {
       formData.append("resource", payload.resource);
     } else if (typeof payload.resource === "string") {
@@ -93,7 +87,7 @@ export async function createLesson(payload: CreateLessonRequest, token: string):
       formData.append("thumbnail", payload.thumbnail);
     }
 
-    const response = await fetch(`${API_BASE_URL}/content/lessons/`, {
+    const response = await fetch(getApiUrl("/content/lessons/"), {
       method: "POST",
       headers: {
         Authorization: `Token ${token}`,
@@ -126,7 +120,7 @@ export async function createLesson(payload: CreateLessonRequest, token: string):
     headers: {
       Authorization: `Token ${token}`,
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(stripServerManagedFields(payload)),
   });
 
   return normalizeLessonResponse(response);
@@ -139,11 +133,8 @@ export async function updateLesson(id: number, payload: UpdateLessonRequest, tok
 
   const requiresFormData = payload.resource instanceof File || payload.thumbnail instanceof File;
   if (requiresFormData) {
-    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
-    if (!API_BASE_URL) {
-      throw new ApiClientError("API base URL is not configured", 0);
-    }
-
+    if (payload.resource instanceof File) validateDocumentUpload(payload.resource);
+    if (payload.thumbnail instanceof File) validateImageUpload(payload.thumbnail);
     const formData = new FormData();
     if (payload.subject !== undefined) formData.append("subject", payload.subject.toString());
     if (payload.topic !== undefined) formData.append("topic", payload.topic.toString());
@@ -151,11 +142,7 @@ export async function updateLesson(id: number, payload: UpdateLessonRequest, tok
     if (payload.title !== undefined) formData.append("title", payload.title);
     if (payload.description !== undefined) formData.append("description", payload.description);
     if (payload.type !== undefined) formData.append("type", payload.type);
-    if (payload.status !== undefined) formData.append("status", payload.status);
     if (payload.duration_minutes !== undefined) formData.append("duration_minutes", payload.duration_minutes.toString());
-    if (payload.moderation_comment !== undefined && payload.moderation_comment !== null) {
-      formData.append("moderation_comment", payload.moderation_comment);
-    }
     if (payload.resource instanceof File) {
       formData.append("resource", payload.resource);
     } else if (typeof payload.resource === "string") {
@@ -167,7 +154,7 @@ export async function updateLesson(id: number, payload: UpdateLessonRequest, tok
       formData.append("thumbnail", payload.thumbnail);
     }
 
-    const response = await fetch(`${API_BASE_URL}/lessons/${id}/`, {
+    const response = await fetch(getApiUrl(`/lessons/${id}/`), {
       method: "PATCH",
       headers: {
         Authorization: `Token ${token}`,
@@ -200,7 +187,7 @@ export async function updateLesson(id: number, payload: UpdateLessonRequest, tok
     headers: {
       Authorization: `Token ${token}`,
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(stripServerManagedFields(payload)),
   });
 }
 
@@ -225,12 +212,7 @@ export async function deleteLesson(
     throw new ApiClientError("Authentication token is missing", 401);
   }
 
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!API_BASE_URL) {
-    throw new ApiClientError("API base URL is not configured", 0);
-  }
-
-  const response = await fetch(`${API_BASE_URL}/lessons/${id}/`, {
+  const response = await fetch(getApiUrl(`/lessons/${id}/`), {
     method: "DELETE",
     headers: {
       Authorization: `Token ${token}`,

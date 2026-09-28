@@ -48,3 +48,11 @@ export function normalizeAdminListResponse<T>(
 
   return [];
 }
+
+export function fetchAdminList<T>(
+  endpoint: string,
+  preferredKeys: string[] = [],
+): Promise<T[]> {
+  return apiRequestAllPages<T>(endpoint, {}, preferredKeys);
+}
+import { apiRequestAllPages } from '../client';

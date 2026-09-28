@@ -1,5 +1,5 @@
 import { apiRequest } from "../client";
-import { normalizeAdminListResponse } from "./normalize";
+import { fetchAdminList } from "./normalize";
 
 export type SubjectStatus =
   | "APPROVED"
@@ -30,8 +30,7 @@ export interface UpdateSubjectRequest {
 }
 
 export async function getSubjects(): Promise<Subject[]> {
-  const response = await apiRequest<unknown>("/content/subjects/");
-  return normalizeAdminListResponse<Subject>(response, ["subjects"]);
+  return fetchAdminList<Subject>("/content/subjects/", ["subjects"]);
 }
 
 export async function updateSubject(

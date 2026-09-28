@@ -72,6 +72,11 @@ export interface ParentAssessmentsResponse {
     pending: number;
     in_progress: number;
   };
+  pagination: {
+    count: number;
+    next: string | null;
+    previous: string | null;
+  };
 }
 
 export async function getParentAssessments(): Promise<ParentAssessmentsResponse> {
@@ -106,8 +111,8 @@ export async function getParentSubmissions(): Promise<ParentSubmissionsResponse>
 
 export interface LinkChildRequest {
   student_id: number;
-  student_email: string;
-  student_phone: string;
+  student_email?: string;
+  student_phone?: string;
 }
 
 export interface LinkChildResponse {

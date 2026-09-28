@@ -1,4 +1,5 @@
-import { apiRequest, ApiClientError } from '../client';
+import { apiRequest, apiRequestAllPages, ApiClientError, getApiUrl, stripServerManagedFields } from '../client';
+import { validateCsvUpload, validateDocumentUpload, validateImageUpload } from '@/lib/uploads';
 
 export interface TeacherRecord {
   id: number;
@@ -78,18 +79,18 @@ export async function getTeacherDashboard(): Promise<TeacherDashboard> {
   return await apiRequest<TeacherDashboard>('/teacher/dashboard/');
 }
 
-export interface HeadTeacherDashboard extends TeacherDashboard {}
+export type HeadTeacherDashboard = TeacherDashboard;
 
 export async function getHeadTeacherDashboard(): Promise<HeadTeacherDashboard> {
   return await apiRequest<HeadTeacherDashboard>('/headteacher/dashboard/');
 }
 
 export async function getTeachers(): Promise<TeacherRecord[]> {
-  return await apiRequest<TeacherRecord[]>('/content/teachers/');
+  return await apiRequestAllPages<TeacherRecord>('/content/teachers/', {}, ['teachers']);
 }
 
 export async function getHeadTeacherTeachers(): Promise<TeacherRecord[]> {
-  return await apiRequest<TeacherRecord[]>('/headteacher/teachers/');
+  return await apiRequestAllPages<TeacherRecord>('/headteacher/teachers/', {}, ['teachers']);
 }
 
 export interface GeneralAssessment {
@@ -141,16 +142,15 @@ export interface CreateGeneralAssessmentResponse {
 }
 
 export async function getGeneralAssessments(): Promise<GeneralAssessment[]> {
-  return await apiRequest<GeneralAssessment[]>('/teacher/general-assessments/');
+  return await apiRequestAllPages<GeneralAssessment>('/teacher/general-assessments/', {}, ['assessments']);
 }
 
 export async function getHeadTeacherGeneralAssessments(): Promise<GeneralAssessment[]> {
-  return await apiRequest<GeneralAssessment[]>('/headteacher/general-assessments/');
+  return await apiRequestAllPages<GeneralAssessment>('/headteacher/general-assessments/', {}, ['assessments']);
 }
 
 export async function createGeneralAssessment(payload: CreateGeneralAssessmentRequest): Promise<CreateGeneralAssessmentResponse> {
-  // Don't send given_by - let the backend infer it from the authentication token
-  const { given_by, ...requestPayload } = payload;
+  const requestPayload = stripServerManagedFields(payload);
   
   return await apiRequest<CreateGeneralAssessmentResponse>('/teacher/general-assessments/create/', {
     method: 'POST',
@@ -248,13 +248,8 @@ export interface BulkUploadTeacherResponse {
 }
 
 export async function downloadTeacherBulkTemplate(): Promise<Blob> {
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!API_BASE_URL) {
-    throw new ApiClientError('API base URL is not configured', 0);
-  }
-
   const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-  const url = `${API_BASE_URL}/content/teachers/bulk-template/`;
+  const url = getApiUrl('/content/teachers/bulk-template/');
 
   const response = await fetch(url, {
     method: 'GET',
@@ -284,13 +279,8 @@ export async function downloadTeacherBulkTemplate(): Promise<Blob> {
 }
 
 export async function downloadHeadTeacherTeacherBulkTemplate(): Promise<Blob> {
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!API_BASE_URL) {
-    throw new ApiClientError('API base URL is not configured', 0);
-  }
-
   const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-  const url = `${API_BASE_URL}/headteacher/teachers/bulk-template/`;
+  const url = getApiUrl('/headteacher/teachers/bulk-template/');
 
   const response = await fetch(url, {
     method: 'GET',
@@ -320,16 +310,12 @@ export async function downloadHeadTeacherTeacherBulkTemplate(): Promise<Blob> {
 }
 
 export async function bulkCreateTeachers(file: File): Promise<BulkUploadTeacherResponse> {
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!API_BASE_URL) {
-    throw new ApiClientError('API base URL is not configured', 0);
-  }
-
+  validateCsvUpload(file);
   const formData = new FormData();
   formData.append('file', file);
 
   const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-  const url = `${API_BASE_URL}/content/teachers/bulk-create/`;
+  const url = getApiUrl('/content/teachers/bulk-create/');
 
   const response = await fetch(url, {
     method: 'POST',
@@ -361,16 +347,12 @@ export async function bulkCreateTeachers(file: File): Promise<BulkUploadTeacherR
 }
 
 export async function bulkCreateHeadTeacherTeachers(file: File): Promise<BulkUploadTeacherResponse> {
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!API_BASE_URL) {
-    throw new ApiClientError('API base URL is not configured', 0);
-  }
-
+  validateCsvUpload(file);
   const formData = new FormData();
   formData.append('file', file);
 
   const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-  const url = `${API_BASE_URL}/headteacher/teachers/bulk-create/`;
+  const url = getApiUrl('/headteacher/teachers/bulk-create/');
 
   const response = await fetch(url, {
     method: 'POST',
@@ -436,7 +418,7 @@ export interface TeacherStudent {
 }
 
 export async function getTeacherStudents(): Promise<TeacherStudent[]> {
-  return await apiRequest<TeacherStudent[]>('/teacher/students/');
+  return await apiRequestAllPages<TeacherStudent>('/teacher/students/', {}, ['students']);
 }
 
 export interface HeadTeacherStudent extends TeacherStudent {
@@ -447,7 +429,7 @@ export interface HeadTeacherStudent extends TeacherStudent {
 }
 
 export async function getHeadTeacherStudents(): Promise<HeadTeacherStudent[]> {
-  return await apiRequest<HeadTeacherStudent[]>('/headteacher/students/');
+  return await apiRequestAllPages<HeadTeacherStudent>('/headteacher/students/', {}, ['students']);
 }
 
 export interface CreateStudentRequest {
@@ -496,17 +478,8 @@ export interface CreateStudentResponse {
 }
 
 export async function createTeacherStudent(payload: CreateStudentRequest): Promise<CreateStudentResponse> {
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!API_BASE_URL) {
-    throw new ApiClientError('API base URL is not configured', 0);
-  }
-
-  const url = `${API_BASE_URL}/teacher/students/create/`;
+  const url = getApiUrl('/teacher/students/create/');
   const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-
-  console.log('Creating student with payload:', payload);
-  console.log('URL:', url);
-  console.log('Token present:', !!token);
 
   try {
     const response = await fetch(url, {
@@ -518,18 +491,13 @@ export async function createTeacherStudent(payload: CreateStudentRequest): Promi
       body: JSON.stringify(payload),
     });
 
-    console.log('Response status:', response.status);
-    console.log('Response ok:', response.ok);
-
     const contentType = response.headers.get('content-type');
     const isJson = contentType?.includes('application/json');
     
     let data;
     try {
       data = isJson ? await response.json() : await response.text();
-      console.log('Response data:', data);
-    } catch (parseError) {
-      console.error('Error parsing response:', parseError);
+    } catch {
       throw new ApiClientError(
         `Server error (${response.status}): Unable to parse response`,
         response.status
@@ -548,19 +516,11 @@ export async function createTeacherStudent(payload: CreateStudentRequest): Promi
 
       const errors = isJson && data?.errors ? data.errors : undefined;
       
-      console.error('API Error:', {
-        status: response.status,
-        message: errorMessage,
-        errors: errors,
-        fullResponse: data
-      });
-      
       throw new ApiClientError(errorMessage, response.status, errors);
     }
 
     return data as CreateStudentResponse;
   } catch (error) {
-    console.error('Error in createTeacherStudent:', error);
     if (error instanceof ApiClientError) {
       throw error;
     }
@@ -605,13 +565,8 @@ export interface BulkUploadResponse {
 }
 
 export async function downloadBulkTemplate(): Promise<Blob> {
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!API_BASE_URL) {
-    throw new ApiClientError('API base URL is not configured', 0);
-  }
-
   const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-  const url = `${API_BASE_URL}/teacher/students/bulk-template/`;
+  const url = getApiUrl('/teacher/students/bulk-template/');
 
   const response = await fetch(url, {
     method: 'GET',
@@ -641,13 +596,8 @@ export async function downloadBulkTemplate(): Promise<Blob> {
 }
 
 export async function downloadHeadTeacherBulkTemplate(): Promise<Blob> {
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!API_BASE_URL) {
-    throw new ApiClientError('API base URL is not configured', 0);
-  }
-
   const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-  const url = `${API_BASE_URL}/headteacher/students/bulk-template/`;
+  const url = getApiUrl('/headteacher/students/bulk-template/');
 
   const response = await fetch(url, {
     method: 'GET',
@@ -677,16 +627,12 @@ export async function downloadHeadTeacherBulkTemplate(): Promise<Blob> {
 }
 
 export async function bulkCreateStudents(file: File): Promise<BulkUploadResponse> {
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!API_BASE_URL) {
-    throw new ApiClientError('API base URL is not configured', 0);
-  }
-
+  validateCsvUpload(file);
   const formData = new FormData();
   formData.append('file', file);
 
   const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-  const url = `${API_BASE_URL}/teacher/students/bulk-create/`;
+  const url = getApiUrl('/teacher/students/bulk-create/');
 
   const response = await fetch(url, {
     method: 'POST',
@@ -718,16 +664,12 @@ export async function bulkCreateStudents(file: File): Promise<BulkUploadResponse
 }
 
 export async function bulkCreateHeadTeacherStudents(file: File): Promise<BulkUploadResponse> {
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!API_BASE_URL) {
-    throw new ApiClientError('API base URL is not configured', 0);
-  }
-
+  validateCsvUpload(file);
   const formData = new FormData();
   formData.append('file', file);
 
   const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-  const url = `${API_BASE_URL}/headteacher/students/bulk-create/`;
+  const url = getApiUrl('/headteacher/students/bulk-create/');
 
   const response = await fetch(url, {
     method: 'POST',
@@ -855,15 +797,15 @@ export interface TeacherTopic {
 }
 
 export async function getTeacherTopics(): Promise<TeacherTopic[]> {
-  return await apiRequest<TeacherTopic[]>('/teacher/topics/');
+  return await apiRequestAllPages<TeacherTopic>('/teacher/topics/', {}, ['topics']);
 }
 
 export async function getTeacherSubjects(): Promise<TeacherSubject[]> {
-  return await apiRequest<TeacherSubject[]>('/teacher/subjects/');
+  return await apiRequestAllPages<TeacherSubject>('/teacher/subjects/', {}, ['subjects']);
 }
 
 export async function getHeadTeacherSubjects(): Promise<TeacherSubject[]> {
-  return await apiRequest<TeacherSubject[]>('/headteacher/subjects/');
+  return await apiRequestAllPages<TeacherSubject>('/headteacher/subjects/', {}, ['subjects']);
 }
 
 export interface StoryCoverImage {
@@ -924,7 +866,7 @@ export async function getTeacherStories(filters?: {
   if (filters?.tag) params.set('tag', filters.tag);
   const query = params.toString();
   const endpoint = `/teacher/stories/${query ? `?${query}` : ''}`;
-  return await apiRequest<TeacherStoryListItem[]>(endpoint);
+  return await apiRequestAllPages<TeacherStoryListItem>(endpoint, {}, ['stories']);
 }
 
 export async function getTeacherStoryDetail(id: number): Promise<TeacherStoryDetail> {
@@ -995,7 +937,7 @@ export async function getHeadTeacherStories(
 
   const query = params.toString();
   const endpoint = `/headteacher/stories/${query ? `?${query}` : ""}`;
-  return await apiRequest<TeacherStoryListItem[]>(endpoint);
+  return await apiRequestAllPages<TeacherStoryListItem>(endpoint, {}, ['stories']);
 }
 
 export async function publishHeadTeacherStories(
@@ -1166,11 +1108,11 @@ export interface TeacherLesson {
 }
 
 export async function getTeacherLessons(): Promise<TeacherLesson[]> {
-  return await apiRequest<TeacherLesson[]>('/teacher/lessons/');
+  return await apiRequestAllPages<TeacherLesson>('/teacher/lessons/', {}, ['lessons']);
 }
 
 export async function getHeadTeacherLessons(): Promise<TeacherLesson[]> {
-  return await apiRequest<TeacherLesson[]>('/headteacher/lessons/');
+  return await apiRequestAllPages<TeacherLesson>('/headteacher/lessons/', {}, ['lessons']);
 }
 
 export interface UnlockLessonRequest {
@@ -1249,11 +1191,11 @@ export interface TeacherLessonAssessment {
 }
 
 export async function getTeacherLessonAssessments(): Promise<TeacherLessonAssessment[]> {
-  return await apiRequest<TeacherLessonAssessment[]>('/teacher/lesson-assessments/');
+  return await apiRequestAllPages<TeacherLessonAssessment>('/teacher/lesson-assessments/', {}, ['assessments']);
 }
 
 export async function getHeadTeacherLessonAssessments(): Promise<TeacherLessonAssessment[]> {
-  return await apiRequest<TeacherLessonAssessment[]>('/headteacher/lesson-assessments/');
+  return await apiRequestAllPages<TeacherLessonAssessment>('/headteacher/lesson-assessments/', {}, ['assessments']);
 }
 
 export interface AssessmentStatisticsSummary {
@@ -1413,14 +1355,11 @@ async function createLessonAtEndpoint(
   endpoint: string,
   payload: CreateLessonRequest
 ): Promise<CreateLessonResponse> {
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!API_BASE_URL) {
-    throw new Error('API base URL is not configured');
-  }
-
   const requiresFormData = payload.resource instanceof File || payload.thumbnail instanceof File;
   
   if (requiresFormData) {
+    if (payload.resource instanceof File) validateDocumentUpload(payload.resource);
+    if (payload.thumbnail instanceof File) validateImageUpload(payload.thumbnail);
     const formData = new FormData();
     formData.append("subject", payload.subject.toString());
     formData.append("topic", payload.topic.toString());
@@ -1428,11 +1367,7 @@ async function createLessonAtEndpoint(
     formData.append("title", payload.title);
     formData.append("description", payload.description);
     formData.append("type", payload.type);
-    formData.append("status", payload.status);
     formData.append("duration_minutes", payload.duration_minutes.toString());
-    if (payload.moderation_comment !== undefined && payload.moderation_comment !== null) {
-      formData.append("moderation_comment", payload.moderation_comment);
-    }
     if (payload.resource instanceof File) {
       formData.append("resource", payload.resource);
     } else if (typeof payload.resource === "string") {
@@ -1445,7 +1380,7 @@ async function createLessonAtEndpoint(
     }
 
     const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    const response = await fetch(getApiUrl(endpoint), {
       method: 'POST',
       headers: {
         ...(token && { Authorization: `Token ${token}` }),
@@ -1474,7 +1409,7 @@ async function createLessonAtEndpoint(
 
   return await apiRequest<CreateLessonResponse>(endpoint, {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: JSON.stringify(stripServerManagedFields(payload)),
   });
 }
 
@@ -1502,11 +1437,11 @@ export interface TopicOption {
 
 // Use the same endpoints as content creators
 export async function getSubjectsForSelect(): Promise<SubjectOption[]> {
-  const subjects = await apiRequest<any[]>('/content/subjects/');
+  const subjects = await apiRequestAllPages<Record<string, unknown>>('/content/subjects/', {}, ['subjects']);
   return subjects.map((s) => ({
-    id: s.id,
-    name: s.name,
-    grade: s.grade,
+    id: Number(s.id),
+    name: String(s.name ?? ''),
+    grade: String(s.grade ?? ''),
   }));
 }
 
@@ -1515,7 +1450,7 @@ export async function getTopicsForSubject(subjectId: number): Promise<TopicOptio
     return [];
   }
   // Use the same endpoint as content creators: /topics/?subject=${subjectId}
-  return await apiRequest<TopicOption[]>(`/topics/?subject=${subjectId}`);
+  return await apiRequestAllPages<TopicOption>(`/topics/?subject=${subjectId}`, {}, ['topics']);
 }
 
 export interface CreateSubjectRequest {
@@ -1545,24 +1480,16 @@ export interface CreateSubjectResponse {
 }
 
 export async function createTeacherSubject(payload: CreateSubjectRequest): Promise<CreateSubjectResponse> {
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!API_BASE_URL) {
-    throw new Error('API base URL is not configured');
-  }
-
-  const url = `${API_BASE_URL}/content/subjects/`;
+  const url = getApiUrl('/content/subjects/');
 
   if (payload.thumbnail instanceof File) {
+    validateImageUpload(payload.thumbnail);
     const formData = new FormData();
     formData.append('name', payload.name);
     formData.append('grade', payload.grade);
-    formData.append('status', payload.status);
     formData.append('description', payload.description);
     formData.append('thumbnail', payload.thumbnail);
     formData.append('objectives', payload.objectives);
-    if (payload.moderation_comment) {
-      formData.append('moderation_comment', payload.moderation_comment);
-    }
 
     const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
     const response = await fetch(url, {
@@ -1594,7 +1521,7 @@ export async function createTeacherSubject(payload: CreateSubjectRequest): Promi
   } else {
     const response = await apiRequest<CreateSubjectResponse | CreateSubjectResponse[]>('/content/subjects/', {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: JSON.stringify(stripServerManagedFields(payload)),
     });
     return Array.isArray(response) ? response[0] : response;
   }
@@ -1651,7 +1578,7 @@ export async function getQuestions(params?: {
   }
 
   const endpoint = `/teacher/questions/${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
-  return await apiRequest<Question[]>(endpoint);
+  return await apiRequestAllPages<Question>(endpoint, {}, ['questions']);
 }
 
 export async function createQuestion(payload: CreateQuestionRequest): Promise<CreateQuestionResponse> {

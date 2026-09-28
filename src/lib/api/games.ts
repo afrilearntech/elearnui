@@ -6,7 +6,6 @@ export interface Game {
   instructions: string;
   description: string;
   hint: string;
-  correct_answer: string;
   type: string;
   image: string | null;
   created_by: number;

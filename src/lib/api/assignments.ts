@@ -1,4 +1,5 @@
-import { ApiClientError } from './client';
+import { ApiClientError, getApiUrl } from './client';
+import { validateSolutionUpload } from '@/lib/uploads';
 
 export interface SubmitSolutionRequest {
   general_id?: number;
@@ -28,12 +29,12 @@ export async function submitSolution(
     formData.append('solution', data.solution);
   }
   if (data.attachment) {
+    validateSolutionUpload(data.attachment);
     formData.append('attachment', data.attachment);
   }
 
 
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api-v1';
-  const response = await fetch(`${API_BASE_URL}/kids/submit-solution/`, {
+  const response = await fetch(getApiUrl('/kids/submit-solution/'), {
     method: 'POST',
     headers: {
       'Authorization': `Token ${token}`,
@@ -101,10 +102,9 @@ export async function getAssessmentQuestions(
     queryParams.append('lesson_id', params.lesson_id.toString());
   }
 
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api-v1';
   const endpoint = `/kids/assessment-questions/${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
   
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+  const response = await fetch(getApiUrl(endpoint), {
     method: 'GET',
     headers: {
       'Authorization': `Token ${token}`,

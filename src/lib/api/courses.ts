@@ -1,4 +1,4 @@
-import { apiRequest } from './client';
+import { apiRequest, apiRequestAllPages } from './client';
 
 export interface StudyStatsResponse {
   active_subjects: number;
@@ -82,11 +82,11 @@ export async function getSubjects(
   const queryString = queryParams.toString();
   const endpoint = `/subjects/${queryString ? `?${queryString}` : ''}`;
   
-  return apiRequest<Subject[]>(endpoint, {
+  return apiRequestAllPages<Subject>(endpoint, {
     method: 'GET',
     headers: {
       'Authorization': `Token ${token}`,
     },
-  });
+  }, ['subjects']);
 }
 

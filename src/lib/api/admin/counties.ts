@@ -1,5 +1,6 @@
-import { apiRequest } from '../client';
-import { normalizeAdminListResponse } from './normalize';
+import { apiRequest, getApiUrl } from '../client';
+import { fetchAdminList } from './normalize';
+import { validateCsvUpload } from '@/lib/uploads';
 
 export interface County {
   id: number;
@@ -41,8 +42,7 @@ export interface BulkUploadCountyResponse {
 }
 
 export async function getCounties(): Promise<County[]> {
-  const response = await apiRequest<unknown>('/admin/counties/');
-  return normalizeAdminListResponse<County>(response, ['counties']);
+  return fetchAdminList<County>('/admin/counties/', ['counties']);
 }
 
 export async function createCounty(
@@ -65,12 +65,7 @@ export async function updateCounty(
 }
 
 export async function downloadCountyBulkTemplate(): Promise<Blob> {
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!API_BASE_URL) {
-    throw new Error('API base URL is not configured');
-  }
-
-  const response = await fetch(`${API_BASE_URL}/admin/counties/bulk-template/`, {
+  const response = await fetch(getApiUrl('/admin/counties/bulk-template/'), {
     method: 'GET',
     headers: {
       ...(typeof window !== 'undefined' && localStorage.getItem('auth_token') && {
@@ -87,6 +82,7 @@ export async function downloadCountyBulkTemplate(): Promise<Blob> {
 }
 
 export async function bulkCreateCounties(file: File): Promise<BulkUploadCountyResponse> {
+  validateCsvUpload(file);
   const formData = new FormData();
   formData.append('file', file);
 

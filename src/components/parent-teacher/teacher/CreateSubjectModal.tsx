@@ -37,8 +37,8 @@ export default function CreateSubjectModal({ isOpen, onClose, onSuccess }: Creat
     const file = event.target.files?.[0];
     if (!file) return;
     
-    if (file.size > 10 * 1024 * 1024) {
-      showErrorToast("File too large (max 10MB)");
+    if (file.size > 5 * 1024 * 1024) {
+      showErrorToast("File too large (max 5MB)");
       return;
     }
     
@@ -246,7 +246,7 @@ export default function CreateSubjectModal({ isOpen, onClose, onSuccess }: Creat
               <input
                 ref={thumbnailInputRef}
                 type="file"
-                accept="image/png,image/jpeg,image/jpg"
+                accept="image/jpeg,image/png,image/webp"
                 className="hidden"
                 onChange={handleThumbnailChange}
               />
@@ -257,7 +257,7 @@ export default function CreateSubjectModal({ isOpen, onClose, onSuccess }: Creat
               >
                 Upload Thumbnail
               </button>
-              <p className="mt-2 text-xs text-gray-500">PNG or JPG, max 10MB</p>
+              <p className="mt-2 text-xs text-gray-500">PNG, JPG, or WebP, max 5MB</p>
             </div>
             {thumbnailPreview && (
               <div className="mt-4">

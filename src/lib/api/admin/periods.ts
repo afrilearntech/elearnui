@@ -1,4 +1,4 @@
-import { apiRequest, ApiClientError } from '../client';
+import { apiRequest, ApiClientError, getApiUrl } from '../client';
 
 export interface Period {
   id: number;
@@ -61,14 +61,9 @@ export async function updatePeriod(id: number, data: UpdatePeriodRequest): Promi
 }
 
 export async function deletePeriod(id: number): Promise<void> {
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!API_BASE_URL) {
-    throw new ApiClientError('API base URL is not configured', 0);
-  }
-
   const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
 
-  const response = await fetch(`${API_BASE_URL}/periods/${id}/`, {
+  const response = await fetch(getApiUrl(`/periods/${id}/`), {
     method: 'DELETE',
     headers: {
       'Content-Type': 'application/json',

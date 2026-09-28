@@ -1,4 +1,4 @@
-import { apiRequest } from "./client";
+import { apiRequest, apiRequestAllPages } from "./client";
 
 export interface KidsStoryCoverImage {
   prompt: string;
@@ -52,12 +52,12 @@ export async function getKidsStories(
   if (filters?.tag) params.set("tag", filters.tag);
   const query = params.toString();
 
-  return apiRequest<KidsStoryListItem[]>(`/kids/stories/${query ? `?${query}` : ""}`, {
+  return apiRequestAllPages<KidsStoryListItem>(`/kids/stories/${query ? `?${query}` : ""}`, {
     method: "GET",
     headers: {
       Authorization: `Token ${token}`,
     },
-  });
+  }, ["stories"]);
 }
 
 export async function getKidsStoryById(

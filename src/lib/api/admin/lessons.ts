@@ -1,5 +1,5 @@
 import { apiRequest } from "../client";
-import { normalizeAdminListResponse } from "./normalize";
+import { fetchAdminList } from "./normalize";
 
 export type LessonStatus =
   | "APPROVED"
@@ -43,8 +43,7 @@ export interface SubjectSummary {
 }
 
 export async function getLessons(): Promise<Lesson[]> {
-  const response = await apiRequest<unknown>("/content/lessons/");
-  return normalizeAdminListResponse<Lesson>(response, ["lessons"]);
+  return fetchAdminList<Lesson>("/content/lessons/", ["lessons"]);
 }
 
 export async function getTopic(id: number): Promise<Topic> {

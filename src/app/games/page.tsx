@@ -341,7 +341,7 @@ export default function GamesPage() {
     try {
       const details = await getGameById(selectedGame.id, token);
       setCurrentGameDetails(details);
-      initializeGameBoard(details.correct_answer || details.name);
+      initializeGameBoard(details.name);
       setShowGamePlay(true);
     } catch (error) {
       const errorMessage = error instanceof ApiClientError
@@ -414,7 +414,7 @@ export default function GamesPage() {
     try {
       const details = await getGameById(nextGame.id, token);
       setCurrentGameDetails(details);
-      initializeGameBoard(details.correct_answer || details.name);
+      initializeGameBoard(details.name);
       setShowGamePlay(true);
     } catch (error) {
       const errorMessage = error instanceof ApiClientError
@@ -658,7 +658,7 @@ export default function GamesPage() {
 
   const handleCheckWord = () => {
     if (!answerKey || !currentGameDetails) return;
-    setCheckModalMessage(`Correct answer: ${currentGameDetails.correct_answer || answerKey}`);
+    setCheckModalMessage(`Correct answer: ${answerKey}`);
     setShowCheckModal(true);
   };
 

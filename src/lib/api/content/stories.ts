@@ -1,4 +1,4 @@
-import { apiRequest } from "../client";
+import { apiRequest, apiRequestAllPages } from "../client";
 
 export interface StoryCoverImage {
   prompt: string;
@@ -51,7 +51,7 @@ export async function getContentStories(
 
   const query = params.toString();
   const endpoint = `/content/stories/${query ? `?${query}` : ""}`;
-  return await apiRequest<ContentStoryListItem[]>(endpoint);
+  return await apiRequestAllPages<ContentStoryListItem>(endpoint, {}, ["stories"]);
 }
 
 export async function publishContentStories(
