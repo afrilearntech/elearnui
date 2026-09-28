@@ -155,7 +155,7 @@ export default function TeacherDashboardPage() {
             </div>
             <div className="space-y-3">
               <Link
-                href="/dashboard/teacher/assessments"
+                href="/parent-teacher/dashboard/teacher/assessments"
                 className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 <div className="flex items-center gap-3">
@@ -165,7 +165,7 @@ export default function TeacherDashboardPage() {
                 <Icon icon="solar:arrow-right-bold" className="w-5 h-5 text-gray-400" />
               </Link>
               <Link
-                href="/dashboard/teacher/submissions"
+                href="/parent-teacher/dashboard/teacher/submissions"
                 className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 <div className="flex items-center gap-3">
@@ -175,7 +175,7 @@ export default function TeacherDashboardPage() {
                 <Icon icon="solar:arrow-right-bold" className="w-5 h-5 text-gray-400" />
               </Link>
               <Link
-                href="/dashboard/teacher/grades"
+                href="/parent-teacher/dashboard/teacher/grades"
                 className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 <div className="flex items-center gap-3">
@@ -185,7 +185,7 @@ export default function TeacherDashboardPage() {
                 <Icon icon="solar:arrow-right-bold" className="w-5 h-5 text-gray-400" />
               </Link>
               <Link
-                href="/dashboard/teacher/class"
+                href="/parent-teacher/dashboard/teacher/class"
                 className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 <div className="flex items-center gap-3">
@@ -201,7 +201,7 @@ export default function TeacherDashboardPage() {
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-gray-900">Top Performers</h2>
               <Link
-                href="/dashboard/teacher/analytics"
+                href="/parent-teacher/dashboard/teacher/analytics"
                 className="text-sm text-emerald-600 hover:text-emerald-700 font-medium"
               >
                 View All
@@ -255,7 +255,7 @@ export default function TeacherDashboardPage() {
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-gray-900">Pending Submissions</h2>
               <Link
-                href="/dashboard/teacher/submissions?status=Pending Review"
+                href="/parent-teacher/dashboard/teacher/submissions?status=Pending Review"
                 className="text-sm text-emerald-600 hover:text-emerald-700 font-medium"
               >
                 View All
@@ -280,7 +280,7 @@ export default function TeacherDashboardPage() {
                       </p>
                     </div>
                     <Link
-                      href="/dashboard/teacher/submissions"
+                      href="/parent-teacher/dashboard/teacher/submissions"
                       className="ml-3 px-3 py-1.5 text-xs font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors"
                     >
                       Grade
@@ -299,7 +299,7 @@ export default function TeacherDashboardPage() {
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-gray-900">Upcoming Deadlines</h2>
               <Link
-                href="/dashboard/teacher/assessments"
+                href="/parent-teacher/dashboard/teacher/assessments"
                 className="text-sm text-emerald-600 hover:text-emerald-700 font-medium"
               >
                 View All
