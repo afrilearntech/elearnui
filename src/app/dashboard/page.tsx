@@ -19,7 +19,7 @@ export default function Dashboard() {
   useEffect(() => {
     const token = localStorage.getItem('auth_token');
     if (!token) {
-      router.push('/profile-setup');
+      router.push('/login');
       return;
     }
 

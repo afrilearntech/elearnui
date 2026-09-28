@@ -2,7 +2,6 @@
 
 import { useEffect } from 'react';
 import Image from '@/components/images/SafeImage';
-import { Icon } from '@iconify/react';
 import Link from 'next/link';
 import { useAccessibility } from '@/contexts/AccessibilityContext';
 
@@ -25,8 +24,7 @@ export default function Home() {
       
       const message = 
         'Welcome to Liberia eLearn. Your gateway to quality education. ' +
-        'This page has two main options: Continue with Google button, and Continue with Email button. ' +
-        'You can also click Login here link if you already have an account. ' +
+        'Use the Sign in to your account button to select your role and enter your credentials. ' +
         tabInstruction;
       
       announce(message, 'polite');
@@ -122,72 +120,25 @@ export default function Home() {
           </div>
         </div>
         
-        <div className="flex flex-col sm:flex-row gap-4 justify-center mt-8 sm:mt-20">
+        <div className="flex justify-center mt-8 sm:mt-20">
           <Link 
-            href="/profile-setup"
+            href="/sign-in"
             tabIndex={0}
             className="w-full max-w-[305px] h-[50px] bg-linear-to-r from-[#1E40AF] to-[#059669] text-white font-semibold px-6 rounded-full flex items-center justify-center gap-3 hover:from-[#1E3A8A] hover:to-[#047857] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-            aria-label="Continue with Google account. Click to sign up using your Google account."
+            aria-label="Sign in to your Liberia eLearn account"
             onClick={() => {
               if (isEnabled) {
-                announce('Opening Google sign up. You will be redirected to continue with your Google account.', 'polite');
+                announce('Opening sign in. You will be asked to select your role and enter your credentials.', 'polite');
               }
             }}
             onFocus={() => {
               if (isEnabled) {
-                announce('Continue with Google button. Press Enter to select.', 'polite');
+                announce('Sign in to your account button. Press Enter to continue.', 'polite');
               }
             }}
           >
-            <Icon icon="logos:google-icon" className="w-5 h-5" aria-hidden="true" />
-            Continue with Google
+            Sign in to your account
           </Link>
-          
-          <Link 
-            href="/profile-setup"
-            tabIndex={0}
-            className="w-full max-w-[305px] h-[50px] bg-linear-to-r from-[#1E40AF] to-[#059669] text-white font-semibold px-6 rounded-full flex items-center justify-center gap-3 hover:from-[#1E3A8A] hover:to-[#047857] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-            aria-label="Continue with Email account. Click to sign up using your email address."
-            onClick={() => {
-              if (isEnabled) {
-                announce('Opening email sign up. You will be redirected to continue with your email address.', 'polite');
-              }
-            }}
-            onFocus={() => {
-              if (isEnabled) {
-                announce('Continue with Email button. Press Enter to select.', 'polite');
-              }
-            }}
-          >
-            <Icon icon="material-symbols:mail" className="w-5 h-5" aria-hidden="true" />
-            Continue with Email
-          </Link>
-        </div>
-
-        {/* Login Link */}
-        <div className="mt-6">
-          <p className="text-base text-gray-600 mb-2" style={{ fontFamily: 'Andika, sans-serif' }}>
-            Already have an account?{' '}
-            <Link 
-              href="/sign-in"
-              tabIndex={0}
-              className="text-lg font-semibold text-blue-600 hover:text-blue-700 underline focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded px-1"
-              style={{ fontFamily: 'Andika, sans-serif' }}
-              aria-label="Login here. Click to go to the login page if you already have an account."
-              onClick={() => {
-                if (isEnabled) {
-                  announce('Navigating to login page. You will be asked to select your role and enter your credentials.', 'polite');
-                }
-              }}
-              onFocus={() => {
-                if (isEnabled) {
-                  announce('Login here link. Press Enter to go to the login page.', 'polite');
-                }
-              }}
-            >
-              Login here
-            </Link>
-          </p>
         </div>
       </div>
     </main>

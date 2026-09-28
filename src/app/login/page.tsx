@@ -520,19 +520,6 @@ export default function LoginPage() {
             </button>
           </form>
 
-          {/* Signup Link */}
-          <div className="mt-6 text-center">
-            <p className="text-base text-gray-600" style={{ fontFamily: 'Andika, sans-serif' }}>
-              No account?{' '}
-              <Link 
-                href="/profile-setup" 
-                className="text-lg font-semibold text-blue-600 hover:text-blue-700 underline"
-                style={{ fontFamily: 'Andika, sans-serif' }}
-              >
-                Signup
-              </Link>
-            </p>
-          </div>
         </div>
       </div>
     </main>

@@ -23,7 +23,7 @@ export default function LinkChildPage() {
     if (typeof window !== 'undefined') {
       const authToken = localStorage.getItem('auth_token');
       if (!authToken) {
-        router.push('/profile-setup');
+        router.push('/parent-teacher/sign-in/parent');
         return;
       }
       setToken(authToken);
@@ -73,8 +73,8 @@ export default function LinkChildPage() {
     }
 
     if (!token) {
-      showErrorToast('Authentication required. Please complete profile setup first.');
-      router.push('/profile-setup');
+      showErrorToast('Authentication required. Please sign in first.');
+      router.push('/parent-teacher/sign-in/parent');
       return;
     }
 
@@ -149,7 +149,7 @@ export default function LinkChildPage() {
             {/* Back Button */}
             <button
               type="button"
-              onClick={() => router.push('/who-are-you')}
+              onClick={() => router.push('/parent-teacher/dashboard/parent')}
               className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition-all duration-200 border border-white/30 hover:border-white/50"
               style={{ fontFamily: 'Andika, sans-serif' }}
               aria-label="Go back"
