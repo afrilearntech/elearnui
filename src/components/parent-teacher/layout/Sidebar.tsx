@@ -6,6 +6,7 @@ import { useMemo } from "react";
 import { Icon } from "@iconify/react";
 import { showSuccessToast } from "@/lib/toast";
 import { resolveSidebarRole, type DashboardRoleDisplay } from "@/lib/parent-teacher/displayRole";
+import { clearAuthSession } from "@/lib/auth-session";
 
 type NavItem = {
   href: string;
@@ -83,15 +84,12 @@ export default function Sidebar({ mobileOpen = false, onClose, userName = "Paren
   const isTeacherOrHeadTeacher = isTeacher || isHeadTeacher;
   const navItems = isHeadTeacher ? headTeacherNavItems : isTeacher ? teacherNavItems : parentNavItems;
 
-  const handleLogout = () => {
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("auth_token");
-      localStorage.removeItem("user");
-      showSuccessToast("You have been logged out successfully");
-      setTimeout(() => {
-        router.push("/sign-in");
-      }, 500);
-    }
+  const handleLogout = async () => {
+    await clearAuthSession();
+    showSuccessToast("You have been logged out successfully");
+    setTimeout(() => {
+      router.push("/sign-in");
+    }, 500);
     if (onClose) {
       onClose();
     }

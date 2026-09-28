@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { contentLogin } from "@/lib/api/content/auth";
 import { ApiClientError } from "@/lib/api/client";
 import { showSuccessToast, showErrorToast, formatErrorMessage } from "@/lib/toast";
+import { persistAuthSession } from "@/lib/auth-session";
 
 const roles = [
   {
@@ -67,15 +68,12 @@ export default function ContentLoginPage() {
         password: formData.password,
       });
 
-      if (typeof window !== "undefined") {
-        localStorage.setItem("auth_token", response.token);
-        localStorage.setItem("user", JSON.stringify(response.user));
-      }
+      persistAuthSession(response.user);
 
       showSuccessToast("🎉 Login successful! Redirecting...");
       
       setTimeout(() => {
-        router.push("/content/dashboard");
+        router.push(response.user.must_change_password ? "/change-password" : "/content/dashboard");
       }, 1500);
     } catch (error: unknown) {
       if (error instanceof ApiClientError) {

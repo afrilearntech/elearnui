@@ -2,8 +2,9 @@
 
 import Image from "@/components/images/SafeImage";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import React from "react";
+import { clearAuthSession } from "@/lib/auth-session";
 
 type NavItem = {
   href: string;
@@ -46,8 +47,14 @@ type SidebarProps = {
 
 export default function Sidebar({ mobileOpen = false, onClose, userName = "Bertha Jones", userRole = "Content Creator" }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const isValidator = userRole === "Content Validator";
   const filteredNavItems = isValidator ? navItems : navItems.filter((item) => creatorVisibleRoutes.has(item.href));
+
+  const handleLogout = async () => {
+    await clearAuthSession();
+    router.push("/sign-in");
+  };
 
   return (
     <>
@@ -91,13 +98,7 @@ export default function Sidebar({ mobileOpen = false, onClose, userName = "Berth
             </div>
             {/* Logout Button */}
             <button 
-              onClick={() => {
-                if (typeof window !== "undefined") {
-                  localStorage.removeItem("auth_token");
-                  localStorage.removeItem("user");
-                  window.location.href = "/sign-in";
-                }
-              }}
+              onClick={handleLogout}
               className="flex items-center justify-center gap-2 rounded-full bg-emerald-600 text-sm font-semibold text-white hover:bg-emerald-700 w-[220px] h-[50px] mx-auto"
             >
               <Image src="/img/icons/logout.png" alt="" width={16} height={16} />
@@ -148,12 +149,8 @@ export default function Sidebar({ mobileOpen = false, onClose, userName = "Berth
                   </div>
                 </div>
                 <button 
-                  onClick={() => {
-                    if (typeof window !== "undefined") {
-                      localStorage.removeItem("auth_token");
-                      localStorage.removeItem("user");
-                      window.location.href = "/sign-in";
-                    }
+                  onClick={async () => {
+                    await handleLogout();
                     if (onClose) {
                       onClose();
                     }

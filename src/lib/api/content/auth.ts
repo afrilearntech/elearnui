@@ -11,6 +11,7 @@ export interface User {
   phone: string;
   email: string;
   role: string;
+  must_change_password?: boolean;
 }
 
 export interface ContentLoginResponse {

@@ -7,6 +7,7 @@ import { setUserRole } from '@/lib/api/auth';
 import { ApiClientError } from '@/lib/api/client';
 import Spinner from '@/components/ui/Spinner';
 import { showSuccessToast, showErrorToast, formatErrorMessage } from '@/lib/toast';
+import { clearAuthSession, updateStoredUser } from '@/lib/auth-session';
 
 export default function WhoAreYou() {
   const router = useRouter();
@@ -56,7 +57,8 @@ export default function WhoAreYou() {
     setIsLoading(true);
 
     try {
-      await setUserRole({ role: selectedRole }, token);
+      const response = await setUserRole({ role: selectedRole }, token);
+      updateStoredUser({ role: response.role });
       
       showSuccessToast('🎉 Role set successfully! Redirecting...');
       
@@ -72,9 +74,9 @@ export default function WhoAreYou() {
       if (error instanceof ApiClientError) {
         const errorMsg = error.message?.toLowerCase() || '';
         if (error.status === 401 || error.status === 403 || errorMsg.includes('invalid token') || errorMsg.includes('authentication')) {
-          setTimeout(() => {
-            router.push('/tell-us-about-yourself');
-          }, 500);
+          await clearAuthSession();
+          showErrorToast('Your setup session expired. Please start again.');
+          router.replace('/profile-setup');
         } else {
           const friendlyMessage = formatErrorMessage(error.message || 'Failed to set user role');
           showErrorToast(friendlyMessage);

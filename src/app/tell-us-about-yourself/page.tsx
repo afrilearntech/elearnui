@@ -8,6 +8,7 @@ import { aboutUser } from '@/lib/api/auth';
 import { showSuccessToast, showErrorToast, formatErrorMessage } from '@/lib/toast';
 import { ApiClientError } from '@/lib/api/client';
 import Spinner from '@/components/ui/Spinner';
+import { clearAuthSession } from '@/lib/auth-session';
 
 export default function TellUsAboutYourself() {
   const router = useRouter();
@@ -148,25 +149,7 @@ export default function TellUsAboutYourself() {
         grade: formData.gradeLevel, 
       };
 
-      try {
-        await aboutUser(apiData, token);
-      } catch (apiError) {
-        // Even if API call fails due to invalid token, we still redirect to login
-        // The form data was filled, and they can login after approval
-        if (apiError instanceof ApiClientError) {
-          const errorMsg = apiError.message?.toLowerCase() || '';
-          if (apiError.status === 401 || apiError.status === 403 || errorMsg.includes('invalid token') || errorMsg.includes('authentication')) {
-            // Token invalid but continue with redirect - account pending approval
-            console.log('Token invalid (account pending approval), but form completed - redirecting to login');
-          } else {
-            // Re-throw other errors to be handled below
-            throw apiError;
-          }
-        } else {
-          // Re-throw other errors to be handled below
-          throw apiError;
-        }
-      }
+      await aboutUser(apiData, token);
 
       const gradeMatch = formData.gradeLevel.match(/\d+/);
       const gradeNumber = gradeMatch ? parseInt(gradeMatch[0]) : null;
@@ -198,12 +181,12 @@ export default function TellUsAboutYourself() {
         }
       }
 
-      // Always redirect to login after form submission, even if token exists
-      // Account is pending approval, so they need to login after approval
+      await clearAuthSession();
+
       if (userRole === 'teacher') {
         showSuccessToast('🎉 Profile completed successfully! Your account is pending approval. Please login once your account is approved. Redirecting to login...', { duration: 6000 });
         setTimeout(() => {
-          router.push('/parent-teacher/sign-in/parent');
+          router.push('/parent-teacher/sign-in/teacher');
         }, 2000);
       } else {
       showSuccessToast('🎉 Profile completed successfully! Your account is pending approval. Please login once your account is approved. Redirecting to login...', { duration: 6000 });
@@ -215,27 +198,9 @@ export default function TellUsAboutYourself() {
       if (error instanceof ApiClientError) {
         const errorMsg = error.message?.toLowerCase() || '';
         if (error.status === 401 || error.status === 403 || errorMsg.includes('invalid token') || errorMsg.includes('authentication')) {
-          // Check user role to determine redirect destination
-          const storedUser = localStorage.getItem('user');
-          let userRole = 'student';
-          if (storedUser) {
-            try {
-              const user = JSON.parse(storedUser);
-              userRole = user.role?.toLowerCase() || 'student';
-            } catch (e) {
-              console.error('Error parsing user data:', e);
-            }
-          }
-
-          showErrorToast('Your account is pending approval. Please login once your account is approved. Redirecting to login...', { duration: 6000 });
-          setTimeout(() => {
-            if (userRole === 'teacher') {
-              router.push('/parent-teacher/sign-in/parent');
-            } else {
-            router.push('/login');
-            }
-          }, 2000);
-          setIsSubmitting(false);
+          await clearAuthSession();
+          showErrorToast('Your setup session expired. Please start again.');
+          router.replace('/profile-setup');
           return;
         }
         

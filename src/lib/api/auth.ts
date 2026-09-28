@@ -14,6 +14,7 @@ export interface User {
   phone: string;
   email: string;
   role: string;
+  must_change_password?: boolean;
 }
 
 export interface ProfileSetupResponse {
@@ -196,6 +197,7 @@ export interface UserProfileUser {
   dob: string | null;
   gender: string | null;
   role: string;
+  must_change_password?: boolean;
 }
 
 export interface UserProfileStudent {

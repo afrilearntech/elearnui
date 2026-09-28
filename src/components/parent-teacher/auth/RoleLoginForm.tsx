@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { loginParent, loginTeacher, ApiClientError } from "@/lib/api/parent-teacher/auth";
 import { showSuccessToast, showErrorToast, formatErrorMessage } from "@/lib/toast";
 import { normalizeStoredUserRole } from "@/lib/parent-teacher/displayRole";
+import { persistAuthSession } from "@/lib/auth-session";
 
 type ParentTeacherRole = "parent" | "teacher";
 
@@ -89,11 +90,7 @@ export default function RoleLoginForm({ role }: { role: ParentTeacherRole }) {
               : normalized === "Head Teacher"
                 ? "HEADTEACHER"
                 : response.user.role;
-        localStorage.setItem("auth_token", response.token);
-        localStorage.setItem(
-          "user",
-          JSON.stringify({ ...response.user, role: roleForStorage })
-        );
+        persistAuthSession({ ...response.user, role: roleForStorage });
       }
 
       showSuccessToast(`Welcome back, ${response.user.name}! Redirecting to your dashboard...`);
@@ -104,7 +101,7 @@ export default function RoleLoginForm({ role }: { role: ParentTeacherRole }) {
           : config.redirectPath;
 
       setTimeout(() => {
-        router.push(resolvedRedirectPath);
+        router.push(response.user.must_change_password ? "/change-password" : resolvedRedirectPath);
       }, 500);
     } catch (error: unknown) {
       let errorMessage = "An unexpected error occurred. Please try again.";

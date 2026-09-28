@@ -8,6 +8,7 @@ import { profileSetup } from '@/lib/api/auth';
 import { ApiClientError } from '@/lib/api/client';
 import Spinner from '@/components/ui/Spinner';
 import { showSuccessToast, showErrorToast, formatErrorMessage } from '@/lib/toast';
+import { persistAuthSession } from '@/lib/auth-session';
 
 export default function ProfileSetup() {
   const router = useRouter();
@@ -96,12 +97,8 @@ export default function ProfileSetup() {
         throw new Error('Invalid token received. Please try again.');
       }
 
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('auth_token', token.trim());
-        
-        if (response.user) {
-          localStorage.setItem('user', JSON.stringify(response.user));
-        }
+      if (response.user) {
+        persistAuthSession(response.user);
       }
 
       showSuccessToast('🎉 Profile setup successful! Redirecting to next step...');

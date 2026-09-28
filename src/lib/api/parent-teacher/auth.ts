@@ -18,6 +18,7 @@ export interface User {
   email_verified: boolean;
   created_at: string;
   updated_at: string;
+  must_change_password?: boolean;
 }
 
 export interface LoginRequest {

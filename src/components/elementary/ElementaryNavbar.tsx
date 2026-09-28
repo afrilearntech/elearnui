@@ -1,9 +1,9 @@
 'use client';
 
 import Image from '@/components/images/SafeImage';
-import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Icon } from '@iconify/react';
+import { clearAuthSession } from '@/lib/auth-session';
 
 interface ElementaryNavbarProps {
   onMenuToggle: () => void;
@@ -12,14 +12,8 @@ interface ElementaryNavbarProps {
 export default function ElementaryNavbar({ onMenuToggle }: ElementaryNavbarProps) {
   const router = useRouter();
 
-  const handleLogout = () => {
-    // Clear all authentication data
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('auth_token');
-      localStorage.removeItem('user');
-      localStorage.removeItem('user_grade');
-    }
-    // Redirect to login
+  const handleLogout = async () => {
+    await clearAuthSession();
     router.push('/sign-in');
   };
 

@@ -10,6 +10,7 @@ import { ApiClientError } from '@/lib/api/client';
 import Spinner from '@/components/ui/Spinner';
 import { showSuccessToast, showErrorToast, formatErrorMessage } from '@/lib/toast';
 import { useAccessibility } from '@/contexts/AccessibilityContext';
+import { persistAuthSession, updateStoredUser } from '@/lib/auth-session';
 
 export default function LoginPage() {
   const { isEnabled, announce, playSound, speak } = useAccessibility();
@@ -153,8 +154,7 @@ export default function LoginPage() {
       });
 
       if (typeof window !== 'undefined') {
-        localStorage.setItem('auth_token', response.token);
-        localStorage.setItem('user', JSON.stringify(response.user));
+        persistAuthSession(response.user);
         
         if (response.student) {
           const gradeMatch = response.student.grade.match(/\d+/);
@@ -166,8 +166,7 @@ export default function LoginPage() {
           if (gradeNumber) {
             localStorage.setItem('user_grade', gradeNumber.toString());
             
-            const user = { ...response.user, grade: gradeNumber };
-            localStorage.setItem('user', JSON.stringify(user));
+            updateStoredUser({ grade: gradeNumber });
           }
         }
       }
@@ -181,6 +180,11 @@ export default function LoginPage() {
       }
       
       setTimeout(() => {
+        if (response.user.must_change_password) {
+          router.push('/change-password');
+          return;
+        }
+
         let gradeNumber: number | null = null;
         
         if (response.student?.grade) {

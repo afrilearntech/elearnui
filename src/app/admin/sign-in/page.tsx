@@ -6,6 +6,7 @@ import Image from "@/components/images/SafeImage";
 import { adminLogin } from "@/lib/api/admin/auth";
 import { ApiClientError } from "@/lib/api/client";
 import { showSuccessToast, showErrorToast, formatErrorMessage } from "@/lib/toast";
+import { persistAuthSession } from "@/lib/auth-session";
 
 export default function AdminSignInPage() {
   const router = useRouter();
@@ -51,15 +52,12 @@ export default function AdminSignInPage() {
         password: formData.password,
       });
 
-      if (typeof window !== "undefined") {
-        localStorage.setItem("auth_token", response.token);
-        localStorage.setItem("user", JSON.stringify(response.user));
-      }
+      persistAuthSession(response.user);
 
       showSuccessToast("🎉 Login successful! Redirecting...");
       
       setTimeout(() => {
-        router.push("/admin/dashboard");
+        router.push(response.user.must_change_password ? "/change-password" : "/admin/dashboard");
       }, 1500);
     } catch (error: unknown) {
       if (error instanceof ApiClientError) {

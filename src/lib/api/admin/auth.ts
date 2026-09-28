@@ -20,6 +20,7 @@ export interface User {
   email_verified: boolean;
   created_at: string;
   updated_at: string;
+  must_change_password?: boolean;
 }
 
 export interface AdminLoginResponse {
@@ -50,7 +51,7 @@ export interface ChangePasswordResponse {
 export async function changePassword(
   payload: ChangePasswordRequest
 ): Promise<ChangePasswordResponse> {
-  return apiRequest<ChangePasswordResponse>('/api-v1/auth/change-password/', {
+  return apiRequest<ChangePasswordResponse>('/auth/change-password/', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
