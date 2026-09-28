@@ -22,6 +22,7 @@ const remotePatterns: NonNullable<
 ];
 
 const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL;
+const spacesOrigin = "https://afrilearnspace.ams3.digitaloceanspaces.com";
 let apiOrigin = "";
 if (apiBase) {
   try {
@@ -51,7 +52,7 @@ const contentSecurityPolicy = [
   "style-src 'self' 'unsafe-inline'",
   "font-src 'self' data:",
   `img-src 'self' data: blob: https://afrilearnspace.ams3.digitaloceanspaces.com https://images.unsplash.com${apiOrigin ? ` ${apiOrigin}` : ""}`,
-  `media-src 'self' data: blob:${apiOrigin ? ` ${apiOrigin}` : ""}`,
+  `media-src 'self' data: blob: ${spacesOrigin}${apiOrigin ? ` ${apiOrigin}` : ""}`,
   `connect-src 'self' https://api.iconify.design https://api.simplesvg.com https://api.unisvg.com${apiOrigin ? ` ${apiOrigin}` : ""}`,
   `frame-src 'self' blob:${apiOrigin ? ` ${apiOrigin}` : ""}`,
   "worker-src 'self' blob:",
