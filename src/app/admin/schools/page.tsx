@@ -7,6 +7,7 @@ import {
   getSchools, 
   School, 
   createSchool,
+  updateSchoolModeration,
   downloadSchoolBulkTemplate,
   bulkCreateSchools,
   BulkUploadSchoolResponse,
@@ -143,6 +144,22 @@ export default function SchoolsPage() {
   const closeViewModal = () => {
     setIsViewModalOpen(false);
     setSelectedSchool(null);
+  };
+
+  const handleModerateSchool = async (
+    school: School,
+    status: SchoolStatus,
+    moderationComment: string,
+  ) => {
+    try {
+      const updatedSchool = await updateSchoolModeration(school.id, status, moderationComment);
+      setSchools((current) => current.map((item) => item.id === updatedSchool.id ? updatedSchool : item));
+      setSelectedSchool(updatedSchool);
+      showSuccessToast(`School ${status.toLowerCase().replace('_', ' ')} successfully.`);
+    } catch (error) {
+      showErrorToast(error instanceof Error ? error.message : "Failed to moderate school.");
+      throw error;
+    }
   };
 
   const getStatusBadge = (status: SchoolStatus) => {
@@ -384,7 +401,11 @@ export default function SchoolsPage() {
       </div>
 
       {isViewModalOpen && selectedSchool && (
-        <SchoolViewModal school={selectedSchool} onClose={closeViewModal} />
+        <SchoolViewModal
+          school={selectedSchool}
+          onClose={closeViewModal}
+          onModerate={handleModerateSchool}
+        />
       )}
 
       {isCreateModalOpen && (
@@ -416,7 +437,34 @@ export default function SchoolsPage() {
   );
 }
 
-function SchoolViewModal({ school, onClose }: { school: School; onClose: () => void }) {
+function SchoolViewModal({
+  school,
+  onClose,
+  onModerate,
+}: {
+  school: School;
+  onClose: () => void;
+  onModerate: (school: School, status: SchoolStatus, moderationComment: string) => Promise<void>;
+}) {
+  const [moderationComment, setModerationComment] = useState(school.moderation_comment || "");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleModeration = async (status: SchoolStatus) => {
+    if (status === "REQUEST_CHANGES" && !moderationComment.trim()) {
+      showErrorToast("Add a moderation comment describing the requested changes.");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      await onModerate(school, status, moderationComment);
+      onClose();
+    } catch {
+      // The parent handler reports the API error and keeps the modal open.
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString("en-US", {
@@ -504,6 +552,23 @@ function SchoolViewModal({ school, onClose }: { school: School; onClose: () => v
               </div>
             )}
 
+            {school.status === "PENDING" && (
+              <div>
+                <label htmlFor="school-moderation-comment" className="text-sm font-medium text-gray-700">
+                  Moderation comment
+                </label>
+                <textarea
+                  id="school-moderation-comment"
+                  value={moderationComment}
+                  onChange={(event) => setModerationComment(event.target.value)}
+                  rows={3}
+                  disabled={isSubmitting}
+                  className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-200 disabled:opacity-60"
+                  placeholder="Required when requesting changes"
+                />
+              </div>
+            )}
+
             <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
               <button
                 onClick={onClose}
@@ -514,28 +579,22 @@ function SchoolViewModal({ school, onClose }: { school: School; onClose: () => v
               {school.status === "PENDING" && (
                 <>
                   <button
-                    onClick={() => {
-                      console.log("Approve school:", school.id);
-                      onClose();
-                    }}
+                    onClick={() => void handleModeration("APPROVED")}
+                    disabled={isSubmitting}
                     className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors"
                   >
                     Approve
                   </button>
                   <button
-                    onClick={() => {
-                      console.log("Reject school:", school.id);
-                      onClose();
-                    }}
+                    onClick={() => void handleModeration("REJECTED")}
+                    disabled={isSubmitting}
                     className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors"
                   >
                     Reject
                   </button>
                   <button
-                    onClick={() => {
-                      console.log("Request changes for school:", school.id);
-                      onClose();
-                    }}
+                    onClick={() => void handleModeration("REQUEST_CHANGES")}
+                    disabled={isSubmitting}
                     className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
                   >
                     Request Changes
@@ -713,8 +772,8 @@ function BulkUploadSchoolsModal({
       showErrorToast("Please select a CSV file.");
       return;
     }
-    if (file.size > 10 * 1024 * 1024) {
-      showErrorToast("File size must be less than 10MB.");
+    if (file.size > 2 * 1024 * 1024) {
+      showErrorToast("File size must be 2MB or less.");
       return;
     }
     setSelectedFile(file);
@@ -930,7 +989,7 @@ function BulkUploadSchoolsModal({
                     </button>
                   </p>
                   <p className="text-sm text-gray-500">
-                    CSV files only, maximum 10MB.
+                    CSV files only, maximum 2MB.
                   </p>
                 </div>
               ) : (

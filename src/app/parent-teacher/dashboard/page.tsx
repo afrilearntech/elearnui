@@ -58,7 +58,7 @@ export default function DashboardPage() {
     fetchDashboardData();
   }, []);
 
-  const handleLinkChild = async (childData: { student_id: number; student_email: string; student_phone: string }) => {
+  const handleLinkChild = async (childData: { student_id: number; student_email?: string; student_phone?: string }) => {
     try {
       setIsLoading(true);
       const response: LinkChildResponse = await linkChild(childData);

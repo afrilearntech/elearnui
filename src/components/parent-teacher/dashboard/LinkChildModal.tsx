@@ -5,7 +5,7 @@ import { FormEvent, useState } from "react";
 interface LinkChildModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onLink: (data: { student_id: number; student_email: string; student_phone: string }) => void;
+  onLink: (data: { student_id: number; student_email?: string; student_phone?: string }) => void;
 }
 
 export default function LinkChildModal({ isOpen, onClose, onLink }: LinkChildModalProps) {
@@ -28,8 +28,10 @@ export default function LinkChildModal({ isOpen, onClose, onLink }: LinkChildMod
   const validate = () => {
     const newErrors: Record<string, string> = {};
     if (!formData.student_id.trim()) newErrors.student_id = "Student ID is required";
-    if (!formData.student_email.trim()) newErrors.student_email = "Student email is required";
-    if (!formData.student_phone.trim()) newErrors.student_phone = "Student phone is required";
+    if (!formData.student_email.trim() && !formData.student_phone.trim()) {
+      newErrors.student_email = "Enter the student's email or phone number";
+      newErrors.student_phone = "Enter the student's email or phone number";
+    }
     
     // Email validation
     if (formData.student_email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.student_email)) {
@@ -60,8 +62,8 @@ export default function LinkChildModal({ isOpen, onClose, onLink }: LinkChildMod
       
       onLink({
         student_id: studentIdNum,
-        student_email: formData.student_email.trim(),
-        student_phone: formData.student_phone.trim(),
+        ...(formData.student_email.trim() ? { student_email: formData.student_email.trim() } : {}),
+        ...(formData.student_phone.trim() ? { student_phone: formData.student_phone.trim() } : {}),
       });
       setFormData({ student_id: "", student_email: "", student_phone: "" });
       setErrors({});

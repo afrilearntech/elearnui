@@ -52,14 +52,13 @@ export default function LinkChildPage() {
       newErrors.student_id = 'Student ID is required';
     }
 
-    if (!formData.student_email.trim()) {
-      newErrors.student_email = 'Student email is required';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.student_email.trim())) {
+    if (formData.student_email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.student_email.trim())) {
       newErrors.student_email = 'Please enter a valid email address';
     }
 
-    if (!formData.student_phone.trim()) {
-      newErrors.student_phone = 'Student phone number is required';
+    if (!formData.student_email.trim() && !formData.student_phone.trim()) {
+      newErrors.student_email = 'Enter the student email or phone number';
+      newErrors.student_phone = 'Enter the student email or phone number';
     }
 
     setErrors(newErrors);
@@ -83,11 +82,10 @@ export default function LinkChildPage() {
     setErrors({});
 
     try {
-      // All three fields are required
       const payload = {
         student_id: formData.student_id.trim(),
-        student_email: formData.student_email.trim(),
-        student_phone: formData.student_phone.trim()
+        ...(formData.student_email.trim() ? { student_email: formData.student_email.trim() } : {}),
+        ...(formData.student_phone.trim() ? { student_phone: formData.student_phone.trim() } : {})
       };
 
       await linkChild(payload, token);
@@ -169,7 +167,7 @@ export default function LinkChildPage() {
         <form onSubmit={handleSubmit} className="px-4 sm:px-[73px] sm:pr-[68px] pt-[72px] pb-8 space-y-6 flex-1 overflow-y-auto">
           <div>
             <p className="text-sm text-gray-600 mb-6" style={{ fontFamily: 'Andika, sans-serif' }}>
-              Please provide all the following information to link your child's account:
+              Enter the student ID and either the student's email address or phone number.
             </p>
             
             {/* Student ID Field */}
@@ -203,7 +201,7 @@ export default function LinkChildPage() {
               <div className="flex items-center gap-2 mb-2">
                 <Icon icon="material-symbols:mail" className="w-4 h-4 text-gray-600" />
                 <label className="text-sm font-medium text-gray-700" style={{ fontFamily: 'Andika, sans-serif' }}>
-                  Student Email <span className="text-red-500">*</span>
+                  Student Email
                 </label>
               </div>
               <input
@@ -229,7 +227,7 @@ export default function LinkChildPage() {
               <div className="flex items-center gap-2 mb-2">
                 <Icon icon="material-symbols:phone" className="w-4 h-4 text-gray-600" />
                 <label className="text-sm font-medium text-gray-700" style={{ fontFamily: 'Andika, sans-serif' }}>
-                  Student Phone Number <span className="text-red-500">*</span>
+                  Student Phone Number
                 </label>
               </div>
               <input

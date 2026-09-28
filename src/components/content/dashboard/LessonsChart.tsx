@@ -8,7 +8,6 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
 } from "recharts";
 
@@ -63,19 +62,6 @@ export default function LessonsChart() {
     }
   };
 
-  const getXAxisKey = () => {
-    switch (timeframe) {
-      case "Day":
-        return "day";
-      case "Month":
-        return "month";
-      case "Year":
-        return "year";
-      default:
-        return "month";
-    }
-  };
-
   const formatYAxis = (value: number) => {
     if (value >= 1000000) {
       return `${(value / 1000000).toFixed(1)}M`;
@@ -86,8 +72,12 @@ export default function LessonsChart() {
     return value.toString();
   };
 
-  const data = getData();
-  const xAxisKey = getXAxisKey();
+  const data = getData().map((row) => ({
+    label: 'day' in row ? row.day : 'month' in row ? row.month : row.year,
+    submitted: row.submitted,
+    approved: row.approved,
+    rejected: row.rejected,
+  }));
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -133,7 +123,7 @@ export default function LessonsChart() {
           <BarChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
             <XAxis
-              dataKey={xAxisKey}
+              dataKey="label"
               tick={{ fill: "#6B7280", fontSize: 12 }}
               stroke="#E5E7EB"
             />

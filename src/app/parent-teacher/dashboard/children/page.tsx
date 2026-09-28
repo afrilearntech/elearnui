@@ -24,7 +24,7 @@ export default function MyChildrenPage() {
     showErrorToast("Failed to load children. Please try again.");
   }, [isError, error]);
 
-  const handleLinkChild = async (childData: { student_id: number; student_email: string; student_phone: string }) => {
+  const handleLinkChild = async (childData: { student_id: number; student_email?: string; student_phone?: string }) => {
     try {
       setIsLinking(true);
       const response: LinkChildResponse = await linkChild(childData);

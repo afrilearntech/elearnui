@@ -37,9 +37,6 @@ const gradeOptions = [
 ];
 
 export default function AddUserModal({ userType, activeTab, onTabChange, onClose, onSuccess }: AddUserModalProps) {
-  if (!userType) {
-    return null;
-  }
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -228,8 +225,8 @@ export default function AddUserModal({ userType, activeTab, onTabChange, onClose
       return;
     }
 
-    if (file.size > 10 * 1024 * 1024) {
-      showErrorToast("File size must be less than 10MB.");
+    if (file.size > 2 * 1024 * 1024) {
+      showErrorToast("File size must be 2MB or less.");
       return;
     }
 
@@ -711,7 +708,7 @@ export default function AddUserModal({ userType, activeTab, onTabChange, onClose
                           </button>
                         </p>
                         <p className="text-sm text-gray-500">
-                          CSV files only, max 10MB
+                          CSV files only, max 2MB
                         </p>
                       </div>
                     ) : (
