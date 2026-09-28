@@ -24,14 +24,28 @@ function getBackendBaseUrl(): string {
   return configured.replace(/\/$/, '');
 }
 
-function isSameOriginRequest(request: NextRequest): boolean {
+function requestOrigins(request: NextRequest): Set<string> {
+  const origins = new Set<string>([request.nextUrl.origin]);
+  const host = request.headers.get('host');
+  const protocol = request.nextUrl.protocol.replace(':', '');
+
+  if (host && ['http', 'https'].includes(protocol)) {
+    origins.add(`${protocol}://${host}`);
+  }
+
+  return origins;
+}
+
+export function isSameOriginRequest(request: NextRequest): boolean {
   if (SAFE_METHODS.has(request.method)) return true;
 
-  const fetchSite = request.headers.get('sec-fetch-site');
-  if (fetchSite && !['same-origin', 'none'].includes(fetchSite)) return false;
-
   const origin = request.headers.get('origin');
-  return !origin || origin === request.nextUrl.origin;
+  if (origin) {
+    return requestOrigins(request).has(origin);
+  }
+
+  const fetchSite = request.headers.get('sec-fetch-site');
+  return !fetchSite || ['same-origin', 'none'].includes(fetchSite);
 }
 
 function responseHeaders(upstream: Response): Headers {
