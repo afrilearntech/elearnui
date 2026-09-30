@@ -13,6 +13,18 @@ export interface Game {
   updated_at: string;
 }
 
+export interface GamePlayConfig {
+  game_id: number;
+  answer_length: number;
+  letter_pool: string[];
+}
+
+export interface GameAnswerCheckResult {
+  correct: boolean;
+  detail: string;
+  correct_answer?: string;
+}
+
 type GamesResponseShape =
   | Game[]
   | {
@@ -45,6 +57,29 @@ export async function getGameById(id: number | string, token: string): Promise<G
     headers: {
       'Authorization': `Token ${token}`,
     },
+  });
+}
+
+export async function getGamePlayConfig(id: number | string, token: string): Promise<GamePlayConfig> {
+  return apiRequest<GamePlayConfig>(`/games/${id}/play/`, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Token ${token}`,
+    },
+  });
+}
+
+export async function checkGameAnswer(
+  id: number | string,
+  answer: string,
+  token: string,
+): Promise<GameAnswerCheckResult> {
+  return apiRequest<GameAnswerCheckResult>(`/games/${id}/check-answer/`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Token ${token}`,
+    },
+    body: JSON.stringify({ answer }),
   });
 }
 

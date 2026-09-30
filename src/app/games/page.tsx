@@ -8,7 +8,14 @@ import Image from '@/components/images/SafeImage';
 import confetti from 'canvas-confetti';
 import ElementaryNavbar from '@/components/elementary/ElementaryNavbar';
 import ElementarySidebar from '@/components/elementary/ElementarySidebar';
-import { getGames, getGameById, Game } from '@/lib/api/games';
+import {
+  checkGameAnswer,
+  getGameById,
+  getGamePlayConfig,
+  getGames,
+} from '@/lib/api/games';
+import type { Game, GamePlayConfig } from '@/lib/api/games';
+import { buildGameBoard } from '@/lib/games/gameplay';
 import { ApiClientError } from '@/lib/api/client';
 import { showErrorToast, formatErrorMessage } from '@/lib/toast';
 import Spinner from '@/components/ui/Spinner';
@@ -113,7 +120,7 @@ export default function GamesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isGameDataLoading, setIsGameDataLoading] = useState(false);
   const [showDescriptionModal, setShowDescriptionModal] = useState(false);
-  const [answerKey, setAnswerKey] = useState<string>('');
+  const [answerLength, setAnswerLength] = useState(0);
   const [slots, setSlots] = useState<(string|null)[]>([]);
   const [pool, setPool] = useState<string[]>([]);
   const [basePool, setBasePool] = useState<string[]>([]);
@@ -123,7 +130,9 @@ export default function GamesPage() {
   const [hasChecked, setHasChecked] = useState(false);
   const [showHintModal, setShowHintModal] = useState(false);
   const [showCheckModal, setShowCheckModal] = useState(false);
+  const [checkModalTitle, setCheckModalTitle] = useState('');
   const [checkModalMessage, setCheckModalMessage] = useState('');
+  const [isCheckingAnswer, setIsCheckingAnswer] = useState(false);
   const [showCongratulationsModal, setShowCongratulationsModal] = useState(false);
   const [currentGameIndex, setCurrentGameIndex] = useState<number>(-1);
   const hintButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -132,8 +141,8 @@ export default function GamesPage() {
   const [activeTouchLetter, setActiveTouchLetter] = useState<{ letter: string; from: 'pool' | number } | null>(null);
   const [touchTargetSlot, setTouchTargetSlot] = useState<number | null>(null);
 
-  const accessibilityProgressPercent = answerKey.length
-    ? Math.round((slots.filter(Boolean).length / answerKey.length) * 100)
+  const accessibilityProgressPercent = answerLength
+    ? Math.round((slots.filter(Boolean).length / answerLength) * 100)
     : 0;
 
   const accessibilitySummary = !showGame
@@ -216,42 +225,6 @@ export default function GamesPage() {
   }, [showGamePlay, hasUsedHint, isGameDataLoading, currentGameDetails, slots]);
 
   useEffect(() => {
-    if (!showGamePlay || !answerKey || hasChecked) return;
-    if (slots.every(Boolean) && slots.length === answerKey.length) {
-      const attempt = slots.join('');
-      if (attempt === answerKey) {
-        setHasChecked(true);
-        setShowCelebration(true);
-        setShowCheckModal(false);
-        confetti({
-          particleCount: 100,
-          spread: 70,
-          origin: { y: 0.6 },
-          colors: ['#F472B6', '#FBBF24', '#60A5FA', '#34D399', '#A78BFA'],
-        });
-        confetti({
-          particleCount: 50,
-          angle: 60,
-          spread: 55,
-          origin: { x: 0 },
-          colors: ['#F472B6', '#FBBF24', '#60A5FA', '#34D399', '#A78BFA'],
-        });
-        confetti({
-          particleCount: 50,
-          angle: 120,
-          spread: 55,
-          origin: { x: 1 },
-          colors: ['#F472B6', '#FBBF24', '#60A5FA', '#34D399', '#A78BFA'],
-        });
-        window.setTimeout(() => {
-          setShowCelebration(false);
-          setShowCongratulationsModal(true);
-        }, 2000);
-      }
-    }
-  }, [slots, answerKey, showGamePlay, hasChecked]);
-
-  useEffect(() => {
     if (!isEnabled) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
@@ -284,7 +257,7 @@ export default function GamesPage() {
     setShowGame(true);
     setShowGamePlay(false);
     setCurrentGameDetails(null);
-    setAnswerKey('');
+    setAnswerLength(0);
     setSlots([]);
     setPool([]);
     setBasePool([]);
@@ -295,34 +268,18 @@ export default function GamesPage() {
     setHasChecked(false);
     setShowHintModal(false);
     setShowCheckModal(false);
+    setCheckModalTitle('');
+    setCheckModalMessage('');
+    setIsCheckingAnswer(false);
     setShowCongratulationsModal(false);
   };
 
-  const normalizeAnswer = (answer: string) => answer.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
-
-  const generatePoolFromAnswer = (answer: string) => {
-    const letters = answer.split('');
-    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    const extrasCount = Math.max(3, Math.min(6, Math.ceil(answer.length / 2) || 3));
-    for (let i = 0; i < extrasCount; i += 1) {
-      const randomChar = alphabet[Math.floor(Math.random() * alphabet.length)];
-      letters.push(randomChar);
-    }
-    for (let i = letters.length - 1; i > 0; i -= 1) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [letters[i], letters[j]] = [letters[j], letters[i]];
-    }
-    return letters;
-  };
-
-  const initializeGameBoard = (answer: string) => {
-    const normalized = normalizeAnswer(answer || '');
-    const safeAnswer = normalized || 'FUN';
-    setAnswerKey(safeAnswer);
-    setSlots(Array(safeAnswer.length).fill(null));
-    const poolLetters = generatePoolFromAnswer(safeAnswer);
-    setPool(poolLetters);
-    setBasePool(poolLetters);
+  const initializeGameBoard = (config: GamePlayConfig) => {
+    const board = buildGameBoard(config);
+    setAnswerLength(board.answerLength);
+    setSlots(Array(board.answerLength).fill(null));
+    setPool(board.letterPool);
+    setBasePool(board.letterPool);
   };
 
   const handleStartGame = async () => {
@@ -339,9 +296,12 @@ export default function GamesPage() {
     setShowCheckModal(false);
     setIsGameDataLoading(true);
     try {
-      const details = await getGameById(selectedGame.id, token);
+      const [details, playConfig] = await Promise.all([
+        getGameById(selectedGame.id, token),
+        getGamePlayConfig(selectedGame.id, token),
+      ]);
       setCurrentGameDetails(details);
-      initializeGameBoard(details.name);
+      initializeGameBoard(playConfig);
       setShowGamePlay(true);
     } catch (error) {
       const errorMessage = error instanceof ApiClientError
@@ -360,7 +320,7 @@ export default function GamesPage() {
     setShowGamePlay(false);
     setSelectedGame(null);
     setCurrentGameDetails(null);
-    setAnswerKey('');
+    setAnswerLength(0);
     setSlots([]);
     setPool([]);
     setBasePool([]);
@@ -371,6 +331,9 @@ export default function GamesPage() {
     setHasChecked(false);
     setShowHintModal(false);
     setShowCheckModal(false);
+    setCheckModalTitle('');
+    setCheckModalMessage('');
+    setIsCheckingAnswer(false);
     setShowCongratulationsModal(false);
     setCurrentGameIndex(-1);
   };
@@ -393,7 +356,7 @@ export default function GamesPage() {
     setSelectedGame(nextGame);
     setShowGamePlay(false);
     setCurrentGameDetails(null);
-    setAnswerKey('');
+    setAnswerLength(0);
     setSlots([]);
     setPool([]);
     setBasePool([]);
@@ -403,6 +366,9 @@ export default function GamesPage() {
     setHasChecked(false);
     setShowHintModal(false);
     setShowCheckModal(false);
+    setCheckModalTitle('');
+    setCheckModalMessage('');
+    setIsCheckingAnswer(false);
 
     const token = localStorage.getItem('auth_token');
     if (!token) {
@@ -412,9 +378,12 @@ export default function GamesPage() {
 
     setIsGameDataLoading(true);
     try {
-      const details = await getGameById(nextGame.id, token);
+      const [details, playConfig] = await Promise.all([
+        getGameById(nextGame.id, token),
+        getGamePlayConfig(nextGame.id, token),
+      ]);
       setCurrentGameDetails(details);
-      initializeGameBoard(details.name);
+      initializeGameBoard(playConfig);
       setShowGamePlay(true);
     } catch (error) {
       const errorMessage = error instanceof ApiClientError
@@ -642,11 +611,13 @@ export default function GamesPage() {
   };
 
   const handleClear = () => {
-    if (!answerKey) return;
-    setSlots(Array(answerKey.length).fill(null));
+    if (!answerLength) return;
+    setSlots(Array(answerLength).fill(null));
     setPool([...basePool]);
     setHasChecked(false);
     setShowCheckModal(false);
+    setCheckModalTitle('');
+    setCheckModalMessage('');
   };
 
   const handleHintClick = () => {
@@ -656,15 +627,79 @@ export default function GamesPage() {
     setShowHintModal(true);
   };
 
-  const handleCheckWord = () => {
-    if (!answerKey || !currentGameDetails) return;
-    setCheckModalMessage(`Correct answer: ${answerKey}`);
-    setShowCheckModal(true);
+  const celebrateCorrectAnswer = () => {
+    setHasChecked(true);
+    setShowCelebration(true);
+    confetti({
+      particleCount: 100,
+      spread: 70,
+      origin: { y: 0.6 },
+      colors: ['#F472B6', '#FBBF24', '#60A5FA', '#34D399', '#A78BFA'],
+    });
+    confetti({
+      particleCount: 50,
+      angle: 60,
+      spread: 55,
+      origin: { x: 0 },
+      colors: ['#F472B6', '#FBBF24', '#60A5FA', '#34D399', '#A78BFA'],
+    });
+    confetti({
+      particleCount: 50,
+      angle: 120,
+      spread: 55,
+      origin: { x: 1 },
+      colors: ['#F472B6', '#FBBF24', '#60A5FA', '#34D399', '#A78BFA'],
+    });
+    window.setTimeout(() => {
+      setShowCelebration(false);
+      setShowCongratulationsModal(true);
+    }, 2000);
   };
 
-  const isCorrect = answerKey.length > 0 && slots.every(Boolean) && slots.join('') === answerKey;
-  const progressPercent = answerKey.length
-    ? Math.round((slots.filter(Boolean).length / answerKey.length) * 100)
+  const handleCheckWord = async () => {
+    if (!currentGameDetails || isCheckingAnswer || hasChecked) return;
+    if (!slots.every(Boolean)) {
+      setCheckModalTitle('Keep Going');
+      setCheckModalMessage('Fill every answer box before checking your word.');
+      setShowCheckModal(true);
+      return;
+    }
+
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      router.push('/login');
+      return;
+    }
+
+    setIsCheckingAnswer(true);
+    setShowCheckModal(false);
+    try {
+      const result = await checkGameAnswer(currentGameDetails.id, slots.join(''), token);
+      setCheckModalTitle(result.correct ? 'Great Job!' : 'Try Again');
+      setCheckModalMessage(
+        result.correct
+          ? `Correct answer: ${result.correct_answer || slots.join('')}`
+          : result.detail,
+      );
+      setShowCheckModal(true);
+      announce(result.correct ? 'Correct answer. Great job!' : result.detail, 'polite');
+      if (result.correct) {
+        celebrateCorrectAnswer();
+      }
+    } catch (error) {
+      const errorMessage = error instanceof ApiClientError
+        ? error.message
+        : error instanceof Error
+        ? error.message
+        : 'Unable to check this answer';
+      showErrorToast(formatErrorMessage(errorMessage));
+    } finally {
+      setIsCheckingAnswer(false);
+    }
+  };
+
+  const progressPercent = answerLength
+    ? Math.round((slots.filter(Boolean).length / answerLength) * 100)
     : 0;
 
   return (
@@ -976,11 +1011,19 @@ export default function GamesPage() {
                             <div className="relative w-full sm:w-auto">
                               {showCheckModal && (
                                 <div
+                                  role="status"
+                                  aria-live="polite"
                                   className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-white rounded-xl shadow-lg p-4 max-w-xs w-64 z-50 border border-gray-200"
                                   style={{ fontFamily: 'Andika, sans-serif' }}
                                 >
                                   <div className="flex items-start justify-between mb-2">
-                                    <h4 className="text-sm font-semibold text-[#16A34A]">Great Job!</h4>
+                                    <h4
+                                      className={`text-sm font-semibold ${
+                                        checkModalTitle === 'Great Job!' ? 'text-[#16A34A]' : 'text-[#C2410C]'
+                                      }`}
+                                    >
+                                      {checkModalTitle}
+                                    </h4>
                                     <button
                                       type="button"
                                       className="w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 text-xs"
@@ -995,11 +1038,18 @@ export default function GamesPage() {
                               <button
                                 ref={checkButtonRef}
                                 onClick={handleCheckWord}
-                                disabled={isGameDataLoading || !answerKey}
+                                disabled={
+                                  isGameDataLoading
+                                  || isCheckingAnswer
+                                  || hasChecked
+                                  || !answerLength
+                                  || !slots.every(Boolean)
+                                }
                                 className="h-10 sm:h-11 px-5 sm:px-6 rounded-full text-white text-sm sm:text-base flex items-center gap-2 cursor-pointer w-full sm:w-auto justify-center disabled:opacity-60 shadow-md hover:shadow-lg transition-all active:scale-95"
                                 style={{ background: 'linear-gradient(90deg, #22C55E, #16A34A)' }}
                               >
-                              <Icon icon="mdi:check-circle" width={18} height={18} /> Check Word
+                              <Icon icon="mdi:check-circle" width={18} height={18} />
+                              {isCheckingAnswer ? 'Checking...' : 'Check Word'}
                             </button>
                             </div>
                             <div className="relative w-full sm:w-auto">
