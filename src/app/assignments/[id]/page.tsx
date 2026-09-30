@@ -12,7 +12,6 @@ import {
   submitSolution, 
   SubmitSolutionRequest,
   getAssessmentQuestions,
-  AssessmentQuestionsResponse,
   AssessmentQuestion
 } from '@/lib/api/assignments';
 import { ApiClientError } from '@/lib/api/client';
@@ -20,7 +19,6 @@ import { showErrorToast, showSuccessToast, formatErrorMessage } from '@/lib/toas
 import Spinner from '@/components/ui/Spinner';
 import StudentLoadingScreen from '@/components/ui/StudentLoadingScreen';
 import { useAccessibility } from '@/contexts/AccessibilityContext';
-import { useAutoRead } from '@/hooks/useAutoRead';
 import { isAssessmentLocked } from '@/lib/elementary/lessonQuizUtils';
 import { studentQueryKeys } from '@/lib/student/queryKeys';
 import { useStudentAuthReady } from '@/hooks/student/useStudentAuthReady';
@@ -31,6 +29,39 @@ function assignmentLoadError(code: AssignmentLoadCode, message?: string) {
   const e = new Error(message ?? code) as Error & { code: AssignmentLoadCode };
   e.code = code;
   return e;
+}
+
+function seededRandom(seed: number) {
+  let value = seed;
+  return () => {
+    value = (value * 9301 + 49297) % 233280;
+    return value / 233280;
+  };
+}
+
+function shuffleArray<T>(array: T[], seed: number): T[] {
+  const random = seededRandom(seed);
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
+function shuffleQuestions(questions: AssessmentQuestion[], seed: number): AssessmentQuestion[] {
+  const shuffled = shuffleArray(questions, seed);
+
+  return shuffled.map((question, index) => {
+    if (
+      (question.type === 'MULTIPLE_CHOICE' || question.type === 'FILL_IN_THE_BLANK')
+      && question.options
+    ) {
+      const optionSeed = seed + index * 1000;
+      return { ...question, options: shuffleArray(question.options, optionSeed) };
+    }
+    return question;
+  });
 }
 
 export default function AssignmentDetailPage() {
@@ -86,42 +117,6 @@ export default function AssignmentDetailPage() {
   const isLoading = !authReady || (isPending && data === undefined);
   const isPreparingQuiz =
     Boolean(assessmentData?.questions?.length) && sessionId === null && !isLoading;
-
-  // Seeded random number generator for consistent shuffling
-  const seededRandom = (seed: number) => {
-    let value = seed;
-    return () => {
-      value = (value * 9301 + 49297) % 233280;
-      return value / 233280;
-    };
-  };
-
-  // Shuffle array using Fisher-Yates algorithm with seed
-  const shuffleArray = <T,>(array: T[], seed: number): T[] => {
-    const random = seededRandom(seed);
-    const shuffled = [...array];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    return shuffled;
-  };
-
-  // Shuffle questions and their options
-  const shuffleQuestions = (questions: AssessmentQuestion[], seed: number): AssessmentQuestion[] => {
-    const shuffled = shuffleArray(questions, seed);
-    
-    // Also shuffle options for multiple choice and fill-in-the-blank questions
-    return shuffled.map((question, index) => {
-      if ((question.type === 'MULTIPLE_CHOICE' || question.type === 'FILL_IN_THE_BLANK') && question.options) {
-        const optionSeed = seed + index * 1000; // Different seed for each question's options
-        const shuffledOptions = shuffleArray(question.options, optionSeed);
-        return { ...question, options: shuffledOptions };
-      }
-      return question;
-    });
-  };
-
 
   useEffect(() => {
     if (!assignmentId) {
